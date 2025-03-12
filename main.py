@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QScrollArea
+from PyQt5.QtWidgets import QApplication
 from ui import MainWindow  # Import the UI module
 
 
