@@ -12,6 +12,8 @@ def interpolate_color(start_color, end_color, factor):
         int(max(0, min(255, start_color[2] + (end_color[2] - start_color[2]) * factor)))
     )
 
+# Keeping CustomOutlineFrame for the settings menu if needed,
+# but not using it for the main parts anymore.
 class CustomOutlineFrame(QFrame):
     def __init__(self, position="middle", parent=None):
         super().__init__(parent)
@@ -20,34 +22,8 @@ class CustomOutlineFrame(QFrame):
         self.pen_width = 1
         self.radius = 8
         self.inset = 5  # Reduced inset for balanced spacing
-        self.setContentsMargins(5, 5, 5, 5)  # Balanced margins
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(QPen(self.border_color, self.pen_width))
-        
-        # Draw single outer rounded rectangle
-        main_rect = self.rect().adjusted(0, 0, -1, -1)
-        p.drawRoundedRect(main_rect, self.radius, self.radius)
-        
-        # Create splitter handle gap with balanced spacing
-        gap = 14
-        gap_offset = gap // 2
-        bg_color = self.palette().window().color()
-        p.setPen(QPen(bg_color, self.pen_width))
-        
-        if self.position in ["middle", "right"]:
-            x = main_rect.left() + self.inset
-            center_y = main_rect.center().y()
-            p.drawLine(x, center_y - gap_offset, x, center_y + gap_offset)
-            
-        if self.position in ["left", "middle"]:
-            x = main_rect.right() - self.inset
-            center_y = main_rect.center().y()
-            p.drawLine(x, center_y - gap_offset, x, center_y + gap_offset)
-        p.end()
+        self.setContentsMargins(5, 5, 5, 5)
+        self.setFrameStyle(QFrame.NoFrame)
 
 class ToggleSwitch(QWidget):
     toggled = pyqtSignal(bool)
@@ -60,8 +36,14 @@ class ToggleSwitch(QWidget):
         self.animation = QPropertyAnimation(self, b"circle_pos")
         self.animation.setDuration(250)
         self.animation.setEasingCurve(QEasingCurve.InOutCubic)
+        self._locked = False
+
+    def lock(self, value):
+        self._locked = value
 
     def mousePressEvent(self, event):
+        if self._locked:
+            return
         self._checked = not self._checked
         self.toggled.emit(self._checked)
         self.animation.setStartValue(3 if self._checked else self.width() - self.height() + 3)
@@ -101,13 +83,13 @@ class CustomSplitterHandle(QSplitterHandle):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        line_thickness = 2
+        line_thickness = 1
         center_x = self.width() // 2
         line_length = 20
         y_start = (self.height() - line_length) // 2
         
-        p.fillRect(center_x-5-line_thickness, y_start, line_thickness, line_length, Qt.gray)
-        p.fillRect(center_x+5, y_start, line_thickness, line_length, Qt.gray)
+        p.fillRect(center_x-2-line_thickness, y_start, line_thickness, line_length, Qt.gray)
+        p.fillRect(center_x+2, y_start, line_thickness, line_length, Qt.gray)
         p.setPen(QPen(Qt.gray, 1))
         p.drawLine(center_x, 0, center_x, self.height())
         p.end()
@@ -204,7 +186,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RapidPrompt")
         self.resize(1600, 900)
-        
+    
         # Color configurations
         self.light_bg = (255, 255, 255)
         self.dark_bg = (45, 45, 45)
@@ -212,90 +194,97 @@ class MainWindow(QMainWindow):
         self.dark_text = (220, 220, 220)
         self.current_bg = self.dark_bg
         self.current_text = self.dark_text
-        
-        # Text field styles
-        self.textfield_bg_light = "#ffffff"
-        self.textfield_border_light = "#cccccc"
-        self.textfield_bg_dark = "#3a3a3a"
-        self.textfield_border_dark = "#555555"
-        
+        self.textfield_bg_light = (255, 255, 255)
+        self.textfield_bg_dark = (58, 58, 58)
+        self.textfield_border_light = (204, 204, 204)
+        self.textfield_border_dark = (85, 85, 85)
+    
         self.animating = False
         self.timer = None
-        
+    
         self.init_ui()
         self.update_stylesheet(self.current_bg, self.current_text)
-        self.update_text_field_styles()
+        self.update_text_field_styles_dynamic(self.current_bg)
+    
+        # Instantiate settings menu and connect dark/light toggle signal
+        self.settings_menu = SettingsMenu(self.central)
+        self.settings_menu.hide()
+        self.settings_menu.toggle.toggled.connect(self.handle_mode_change)
 
     def init_ui(self):
         self.central = QWidget()
         self.setCentralWidget(self.central)
-        layout = QVBoxLayout(self.central)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Main splitter
-        self.splitter = CustomSplitter(Qt.Horizontal)
-        self.splitter.setHandleWidth(15)  # Wider handles
-        
-        # Part 1 (Left)
+        main_layout = QVBoxLayout(self.central)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+    
+        # --- Create a vertical splitter to divide top and bottom sections ---
+        vertical_splitter = QSplitter(Qt.Vertical)
+    
+        # --- Top Section: Horizontal splitter with Part 1 and Part 2 ---
+        top_splitter = CustomSplitter(Qt.Horizontal)
+        top_splitter.setHandleWidth(15)
+    
+        # Part 1 (Left): Text Input without extra outline
         scroll1 = QScrollArea()
-        part1 = CustomOutlineFrame("left")
+        part1 = QWidget()  # Use plain QWidget instead of CustomOutlineFrame
         scroll1.setWidget(part1)
         scroll1.setWidgetResizable(True)
-        self.text_input = QTextEdit()  # Empty initial text
+        self.text_input = QTextEdit()  # Your text field with its own styling
         self.text_input.setMinimumWidth(200)
-        part1.setLayout(QVBoxLayout())
-        part1.layout().addWidget(self.text_input, alignment=Qt.AlignCenter)
-        self.splitter.addWidget(scroll1)
-        
-        # Part 2 (Middle)
+        layout1 = QVBoxLayout(part1)
+        layout1.setContentsMargins(0, 0, 0, 0)
+        layout1.addWidget(self.text_input, alignment=Qt.AlignCenter)
+        top_splitter.addWidget(scroll1)
+    
+        # Part 2 (Right): Text Display without extra outline
         scroll2 = QScrollArea()
-        part2 = CustomOutlineFrame("middle")
+        part2 = QWidget()  # Use plain QWidget
         scroll2.setWidget(part2)
         scroll2.setWidgetResizable(True)
         self.text_display = QLabel()
         self.text_display.setAlignment(Qt.AlignCenter)
-        part2.setLayout(QVBoxLayout())
-        part2.layout().addWidget(self.text_display, alignment=Qt.AlignCenter)
-        self.splitter.addWidget(scroll2)
-        
-        # Part 3 (Right) with dynamic layout
+        layout2 = QVBoxLayout(part2)
+        layout2.setContentsMargins(0, 0, 0, 0)
+        layout2.addWidget(self.text_display, alignment=Qt.AlignCenter)
+        top_splitter.addWidget(scroll2)
+    
+        vertical_splitter.addWidget(top_splitter)
+    
+        # --- Bottom Section: Part 3 spanning full width ---
         scroll3 = QScrollArea()
-        part3 = CustomOutlineFrame("right")
+        part3 = QWidget()  # Use plain QWidget to avoid an extra outline
         scroll3.setWidget(part3)
         scroll3.setWidgetResizable(True)
-        
+    
         self.part3_container = QWidget()
         self.part3_layout = QHBoxLayout(self.part3_container)
         self.part3_layout.setContentsMargins(0, 0, 0, 0)
         self.part3_layout.setSpacing(10)
-        
+    
         self.part3_fields = []
         for _ in range(3):  # Start with 3 fields
             self.add_part3_field()
-            
-        part3.setLayout(QVBoxLayout())
-        part3.layout().addWidget(self.part3_container)
-        self.splitter.addWidget(scroll3)
-        
-        layout.addWidget(self.splitter, 1)
-        self.text_input.textChanged.connect(lambda: self.text_display.setText(self.text_input.toPlainText()))
-        self.splitter.splitterMoved.connect(self.adjust_part3_layout)
-        
-        # Bottom bar
+    
+        layout3 = QVBoxLayout(part3)
+        layout3.setContentsMargins(0, 0, 0, 0)
+        layout3.addWidget(self.part3_container)
+    
+        vertical_splitter.addWidget(scroll3)
+    
+        main_layout.addWidget(vertical_splitter)
+    
+        # Settings icon at the bottom
+        bottom_bar = QVBoxLayout()
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        layout.addWidget(line)
-        
+        bottom_bar.addWidget(line)
+    
         self.settings_icon = ClickableLabel("⚙")
         self.settings_icon.clicked.connect(self.show_settings_menu)
-        layout.addWidget(self.settings_icon, alignment=Qt.AlignLeft)
-        
-        # Settings menu
-        self.settings_menu = SettingsMenu(self.central)
-        self.settings_menu.hide()
-        self.settings_menu.reset_button.clicked.connect(self.reset_splitter)
-        self.settings_menu.toggle.toggled.connect(self.handle_mode_change)
-        self.settings_menu.spin_box.valueChanged.connect(self.update_part3_fields)
+        bottom_bar.addWidget(self.settings_icon, alignment=Qt.AlignLeft)
+    
+        main_layout.addLayout(bottom_bar)
+    
         self.central.installEventFilter(self)
 
     def add_part3_field(self):
@@ -309,13 +298,12 @@ class MainWindow(QMainWindow):
         min_field_width = 220  # 200 + margins
         fields_per_row = max(1, available_width // min_field_width)
         
-        # Clear existing layout
+        # Clear and re-add fields with wrapping
         while self.part3_layout.count():
             item = self.part3_layout.takeAt(0)
             if item.widget():
                 item.widget().hide()
                 
-        # Re-add fields with wrapping
         current_row = QHBoxLayout()
         current_row.setSpacing(10)
         for i, field in enumerate(self.part3_fields):
@@ -327,13 +315,14 @@ class MainWindow(QMainWindow):
         self.part3_layout.addLayout(current_row)
 
     def update_part3_fields(self, count):
+        # Adjust number of fields based on spin box value
         while len(self.part3_fields) > count:
             field = self.part3_fields.pop()
+            self.part3_layout.removeWidget(field)
             field.deleteLater()
         while len(self.part3_fields) < count:
             self.add_part3_field()
-        self.adjust_part3_layout()
-        self.update_text_field_styles()
+        self.update_text_field_styles_dynamic(self.current_bg)
 
     def show_settings_menu(self):
         menu_width = int(self.width() * 0.4)
@@ -343,17 +332,6 @@ class MainWindow(QMainWindow):
         y = (self.height() - menu_height) // 2
         self.settings_menu.move(x, y)
         self.settings_menu.show()
-
-    def update_part3_fields(self, count):
-        while len(self.part3_fields) > count:
-            field = self.part3_fields.pop()
-            self.part3_layout.removeWidget(field)
-            field.deleteLater()
-        while len(self.part3_fields) < count:
-            field = TextFieldWithHeader()
-            self.part3_fields.append(field)
-            self.part3_layout.addWidget(field)
-        self.update_text_field_styles()
 
     def eventFilter(self, obj, event):
         if obj == self.central and event.type() == QEvent.MouseButtonPress:
@@ -371,14 +349,11 @@ class MainWindow(QMainWindow):
             y = (self.height() - menu_height) // 2
             self.settings_menu.move(x, y)
 
-    def reset_splitter(self):
-        total = sum(self.splitter.sizes())
-        sizes = [total // self.splitter.count()] * self.splitter.count()
-        self.splitter.setSizes(sizes)
-
     def handle_mode_change(self, dark_mode):
         if self.animating:
             return
+        # Lock toggle during transition
+        self.settings_menu.toggle.lock(True)
         target_bg = self.dark_bg if dark_mode else self.light_bg
         target_text = self.dark_text if dark_mode else self.light_text
         self.animating = True
@@ -395,28 +370,35 @@ class MainWindow(QMainWindow):
             new_bg = interpolate_color(start_bg, end_bg, factor)
             new_text = interpolate_color(start_text, end_text, factor)
             self.update_stylesheet(new_bg, new_text)
+            self.update_text_field_styles_dynamic(new_bg)
             self.step += 1
             if self.step > steps:
                 self.timer.stop()
                 self.current_bg = end_bg
                 self.current_text = end_text
                 self.animating = False
-                self.update_text_field_styles()
+                # Unlock toggle after animation
+                self.settings_menu.toggle.lock(False)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(update)
         self.timer.start(interval)
 
-    def update_text_field_styles(self):
-        bg = self.textfield_bg_dark if self.current_bg == self.dark_bg else self.textfield_bg_light
-        border = self.textfield_border_dark if self.current_bg == self.dark_bg else self.textfield_border_light
-        text_color = "white" if self.current_bg == self.dark_bg else "black"
+    def update_text_field_styles_dynamic(self, bg_color):
+        # Calculate factor: 0 for light_bg, 1 for dark_bg
+        factor = (255 - bg_color[0]) / (255 - 45)
+        new_bg = interpolate_color(self.textfield_bg_light, self.textfield_bg_dark, factor)
+        new_border = interpolate_color(self.textfield_border_light, self.textfield_border_dark, factor)
+        new_text_color = interpolate_color((0, 0, 0), (255, 255, 255), factor)
+        bg_hex = '#%02x%02x%02x' % new_bg
+        border_hex = '#%02x%02x%02x' % new_border
+        text_hex = '#%02x%02x%02x' % new_text_color
         style = f"""
             QTextEdit {{
-                background-color: {bg};
-                border: 1px solid {border};
+                background-color: {bg_hex};
+                border: 1px solid {border_hex};
                 border-radius: 8px;
-                color: {text_color};
+                color: {text_hex};
             }}
         """
         self.text_input.setStyleSheet(style)
