@@ -1,9 +1,9 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy)
-from PyQt5.QtGui import QPainter, QColor, QPen
+from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient
 
 def interpolate_color(start_color, end_color, factor):
     return (
@@ -12,27 +12,21 @@ def interpolate_color(start_color, end_color, factor):
         int(max(0, min(255, start_color[2] + (end_color[2] - start_color[2]) * factor)))
     )
 
-# Keeping CustomOutlineFrame for the settings menu if needed,
-# but not using it for the main parts anymore.
 class CustomOutlineFrame(QFrame):
     def __init__(self, position="middle", parent=None):
         super().__init__(parent)
         self.position = position
-        self.border_color = QColor("#e0e0e0")
-        self.pen_width = 1
-        self.radius = 8
-        self.inset = 5  # Reduced inset for balanced spacing
         self.setContentsMargins(5, 5, 5, 5)
         self.setFrameStyle(QFrame.NoFrame)
 
 class ToggleSwitch(QWidget):
     toggled = pyqtSignal(bool)
-
+    
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(70, 35)
+        self.setFixedSize(30, 20)
         self._checked = True
-        self._circle_pos = self.width() - self.height() + 3
+        self._circle_pos = 3 if not self._checked else (self.width() - self.height() + 3)
         self.animation = QPropertyAnimation(self, b"circle_pos")
         self.animation.setDuration(250)
         self.animation.setEasingCurve(QEasingCurve.InOutCubic)
@@ -46,33 +40,34 @@ class ToggleSwitch(QWidget):
             return
         self._checked = not self._checked
         self.toggled.emit(self._checked)
-        self.animation.setStartValue(3 if self._checked else self.width() - self.height() + 3)
-        self.animation.setEndValue(self.width() - self.height() + 3 if self._checked else 3)
+        start_value = self._circle_pos
+        end_value = (self.width() - self.height() + 3) if self._checked else 3
+        self.animation.setStartValue(start_value)
+        self.animation.setEndValue(end_value)
         self.animation.start()
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        slider_color = QColor(200, 200, 200) if not self._checked else QColor(150, 150, 150)
-        p.setPen(QPen(QColor(120, 120, 120), 2))
-        p.setBrush(slider_color)
+        gradient = QLinearGradient(0, 0, self.width(), 0)
+        if not self._checked:
+            gradient.setColorAt(0, QColor(220, 220, 220))
+            gradient.setColorAt(1, QColor(180, 180, 180))
+        else:
+            gradient.setColorAt(0, QColor(170, 170, 170))
+            gradient.setColorAt(1, QColor(130, 130, 130))
+        p.setPen(Qt.NoPen)
+        p.setBrush(gradient)
         p.drawRoundedRect(self.rect(), self.height()/2, self.height()/2)
-        
         circle_diameter = self.height() - 6
-        circle_rect = QRectF(self._circle_pos, 3, circle_diameter, circle_diameter)
+        circle_rect = QRect(self._circle_pos, 3, circle_diameter, circle_diameter)
         circle_color = QColor(255, 255, 255) if not self._checked else QColor(80, 80, 80)
         p.setPen(QPen(QColor(50, 50, 50), 3))
         p.setBrush(circle_color)
         p.drawEllipse(circle_rect)
-        
-        p.setPen(QPen(Qt.black))
-        font = p.font()
-        font.setPointSize(10)
-        p.setFont(font)
-        p.drawText(circle_rect, Qt.AlignCenter, "☀" if not self._checked else "☾")
         p.end()
 
-    circle_pos = pyqtProperty(int, 
+    circle_pos = pyqtProperty(int,
         lambda self: self._circle_pos,
         lambda self, pos: setattr(self, '_circle_pos', pos) or self.update())
 
@@ -84,14 +79,21 @@ class CustomSplitterHandle(QSplitterHandle):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         line_thickness = 1
-        center_x = self.width() // 2
         line_length = 20
-        y_start = (self.height() - line_length) // 2
-        
-        p.fillRect(center_x-2-line_thickness, y_start, line_thickness, line_length, Qt.gray)
-        p.fillRect(center_x+2, y_start, line_thickness, line_length, Qt.gray)
-        p.setPen(QPen(Qt.gray, 1))
-        p.drawLine(center_x, 0, center_x, self.height())
+        if self.orientation() == Qt.Horizontal:
+            center_x = self.width() // 2
+            y_start = (self.height() - line_length) // 2
+            p.fillRect(center_x - 2 - line_thickness, y_start, line_thickness, line_length, Qt.gray)
+            p.fillRect(center_x + 2, y_start, line_thickness, line_length, Qt.gray)
+            p.setPen(QPen(Qt.gray, 1))
+            p.drawLine(center_x, 0, center_x, self.height())
+        else:
+            center_y = self.height() // 2
+            x_start = (self.width() - line_length) // 2
+            p.fillRect(x_start, center_y - 2 - line_thickness, line_length, line_thickness, Qt.gray)
+            p.fillRect(x_start, center_y + 2, line_length, line_thickness, Qt.gray)
+            p.setPen(QPen(Qt.gray, 1))
+            p.drawLine(0, center_y, self.width(), center_y)
         p.end()
 
     def sizeHint(self):
@@ -123,63 +125,180 @@ class ClickableLabel(QLabel):
     def mousePressEvent(self, event):
         self.clicked.emit()
 
+class Part1Container(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.text_edit = QTextEdit()
+        self.text_edit.setMinimumWidth(200)
+        layout.addWidget(self.text_edit)
+
+class Part2Container(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel()
+        self.label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.label)
+
+class Part3Container(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(10)
+        self.fields = []
+        for _ in range(3):
+            self.add_field()
+
+    def add_field(self):
+        field = TextFieldWithHeader()
+        field.setMinimumWidth(220)
+        self.fields.append(field)
+        self.layout.addWidget(field)
+
+    def update_field_count(self, count):
+        current_count = len(self.fields)
+        if count > current_count:
+            for _ in range(count - current_count):
+                self.add_field()
+        elif count < current_count:
+            for _ in range(current_count - count):
+                field = self.fields.pop()
+                self.layout.removeWidget(field)
+                field.deleteLater()
+
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.update_mode(True)
+        self.setStyleSheet("QFrame { background-color: #f0f0f0; border: 2px solid #888; border-radius: 8px; }")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(20)
-        
-        title_layout = QHBoxLayout()
-        title_layout.addStretch()
-        self.close_button = QPushButton("X")
-        self.close_button.setObjectName("closeButton")
+        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setSpacing(5)
+        layout.addStretch()
+        self.export_button = QPushButton("Export Layout")
+        self.export_button.setStyleSheet("padding: 8px;")
+        self.export_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self.export_button)
+        self.import_button = QPushButton("Import Layout")
+        self.import_button.setStyleSheet("padding: 8px;")
+        self.import_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self.import_button)
+        layout.addSpacing(15)
+        output_layout = QHBoxLayout()
+        self.output_label = QLabel("Output Fields:")
+        output_layout.addWidget(self.output_label)
+        self.output_spin_box = QSpinBox()
+        self.output_spin_box.setMinimum(1)
+        self.output_spin_box.setValue(3)
+        self.output_spin_box.setStyleSheet("""
+            QSpinBox {
+                padding: 4px;
+                font-size: 13px;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                background: #fff;
+                color: #333;
+            }
+            QSpinBox::up-button {
+                background: #ddd;
+                border: none;
+                border-bottom: 1px solid #bbb;
+                width: 16px;
+            }
+            QSpinBox::down-button {
+                background: #ddd;
+                border: none;
+                border-top: 1px solid #bbb;
+                width: 16px;
+            }
+            QSpinBox::up-arrow, QSpinBox::down-arrow {
+                width: 10px;
+                height: 10px;
+            }
+        """)
+        output_layout.addWidget(self.output_spin_box)
+        layout.addLayout(output_layout)
+        layout.addSpacing(15)
+        self.reset_button = QPushButton("Reset Layout")
+        self.reset_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+        self.reset_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self.reset_button)
+        self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+        self.close_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self.close_button)
+        layout.addStretch()
+        self.reset_button.clicked.connect(lambda: self.parentWidget().parentWidget().reset_layout())
         self.close_button.clicked.connect(self.hide)
-        title_layout.addWidget(self.close_button)
-        layout.addLayout(title_layout)
-        
-        controls = QVBoxLayout()
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.setObjectName("resetButton")
-        self.toggle = ToggleSwitch()
-        controls.addWidget(self.reset_button, alignment=Qt.AlignCenter)
-        controls.addWidget(self.toggle, alignment=Qt.AlignCenter)
-        layout.addLayout(controls)
-        
-        spin_layout = QHBoxLayout()
-        spin_layout.addWidget(QLabel("Part 3 Fields:"))
-        self.spin_box = QSpinBox()
-        self.spin_box.setMinimum(1)
-        self.spin_box.setValue(3)  # Start with 3 fields
-        spin_layout.addWidget(self.spin_box)
-        layout.addLayout(spin_layout)
-
+    
     def update_mode(self, dark_mode):
-        base = """
-            QFrame { border: 2px solid %s; border-radius: 8px; }
-            QPushButton#closeButton { border: none; font-weight: bold; background: transparent; }
-            QPushButton#resetButton { border-radius: 5px; padding: 8px 15px; }
-            QSpinBox { padding: 2px; }"""
-        
         if dark_mode:
-            self.setStyleSheet(base % "#AAA" + """
-                QFrame { background-color: #2D2D2D; color: white; }
-                QPushButton#closeButton { color: white; }
-                QPushButton#closeButton:pressed { background-color: #555; }
-                QPushButton#resetButton { background-color: #4CAF50; color: white; }
-                QPushButton#resetButton:hover { background-color: #45a049; }
-                QSpinBox { background-color: #444; color: white; border: 1px solid #888; }
-                QLabel { color: white; }""")
+            self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
+            self.export_button.setStyleSheet("padding: 8px; background-color: #444; color: #ddd;")
+            self.import_button.setStyleSheet("padding: 8px; background-color: #444; color: #ddd;")
+            self.reset_button.setStyleSheet("padding: 8px; background-color: #555; color: #ddd;")
+            self.close_button.setStyleSheet("padding: 8px; background-color: #555; color: #ddd;")
+            self.output_spin_box.setStyleSheet("""
+                QSpinBox {
+                    padding: 4px;
+                    font-size: 13px;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    background: #444;
+                    color: #ddd;
+                }
+                QSpinBox::up-button {
+                    background: #666;
+                    border: none;
+                    border-bottom: 1px solid #555;
+                    width: 16px;
+                }
+                QSpinBox::down-button {
+                    background: #666;
+                    border: none;
+                    border-top: 1px solid #555;
+                    width: 16px;
+                }
+                QSpinBox::up-arrow, QSpinBox::down-arrow {
+                    width: 10px;
+                    height: 10px;
+                }
+            """)
         else:
-            self.setStyleSheet(base % "#888" + """
-                QFrame { background-color: #f0f0f0; color: black; }
-                QPushButton#closeButton { color: black; }
-                QPushButton#closeButton:pressed { background-color: #ccc; }
-                QPushButton#resetButton { background-color: #4CAF50; color: white; }
-                QPushButton#resetButton:hover { background-color: #45a049; }
-                QSpinBox { background-color: white; color: black; border: 1px solid #888; }
-                QLabel { color: black; }""")
+            self.setStyleSheet("QFrame { background-color: #f0f0f0; border: 2px solid #888; border-radius: 8px; color: #333; }")
+            self.export_button.setStyleSheet("padding: 8px; background-color: #ddd; color: #333;")
+            self.import_button.setStyleSheet("padding: 8px; background-color: #ddd; color: #333;")
+            self.reset_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+            self.close_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+            self.output_spin_box.setStyleSheet("""
+                QSpinBox {
+                    padding: 4px;
+                    font-size: 13px;
+                    border: 1px solid #aaa;
+                    border-radius: 4px;
+                    background: #fff;
+                    color: #333;
+                }
+                QSpinBox::up-button {
+                    background: #ddd;
+                    border: none;
+                    border-bottom: 1px solid #bbb;
+                    width: 16px;
+                }
+                QSpinBox::down-button {
+                    background: #ddd;
+                    border: none;
+                    border-top: 1px solid #bbb;
+                    width: 16px;
+                }
+                QSpinBox::up-arrow, QSpinBox::down-arrow {
+                    width: 10px;
+                    height: 10px;
+                }
+            """)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -187,7 +306,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("RapidPrompt")
         self.resize(1600, 900)
     
-        # Color configurations
         self.light_bg = (255, 255, 255)
         self.dark_bg = (45, 45, 45)
         self.light_text = (0, 0, 0)
@@ -201,170 +319,147 @@ class MainWindow(QMainWindow):
     
         self.animating = False
         self.timer = None
+        self.initial_reset_done = False
     
         self.init_ui()
         self.update_stylesheet(self.current_bg, self.current_text)
         self.update_text_field_styles_dynamic(self.current_bg)
     
-        # Instantiate settings menu and connect dark/light toggle signal
         self.settings_menu = SettingsMenu(self.central)
         self.settings_menu.hide()
-        self.settings_menu.toggle.toggled.connect(self.handle_mode_change)
-
+        self.settings_menu.update_mode(self.current_bg == self.dark_bg)
+        self.settings_menu.output_spin_box.valueChanged.connect(self.update_part3_fields)
+    
+        self.installEventFilter(self)
+    
     def init_ui(self):
         self.central = QWidget()
         self.setCentralWidget(self.central)
         main_layout = QVBoxLayout(self.central)
         main_layout.setContentsMargins(10, 10, 10, 10)
     
-        # --- Create a vertical splitter to divide top and bottom sections ---
-        vertical_splitter = QSplitter(Qt.Vertical)
+        self.vertical_splitter = CustomSplitter(Qt.Vertical)
+        self.vertical_splitter.setHandleWidth(15)
     
-        # --- Top Section: Horizontal splitter with Part 1 and Part 2 ---
-        top_splitter = CustomSplitter(Qt.Horizontal)
-        top_splitter.setHandleWidth(15)
+        self.top_splitter = CustomSplitter(Qt.Horizontal)
+        self.top_splitter.setHandleWidth(15)
     
-        # Part 1 (Left): Text Input without extra outline
+        self.part1_container = Part1Container()
         scroll1 = QScrollArea()
-        part1 = QWidget()  # Use plain QWidget instead of CustomOutlineFrame
-        scroll1.setWidget(part1)
+        scroll1.setFrameStyle(QFrame.NoFrame)
+        scroll1.setWidget(self.part1_container)
         scroll1.setWidgetResizable(True)
-        self.text_input = QTextEdit()  # Your text field with its own styling
-        self.text_input.setMinimumWidth(200)
-        layout1 = QVBoxLayout(part1)
-        layout1.setContentsMargins(0, 0, 0, 0)
-        layout1.addWidget(self.text_input, alignment=Qt.AlignCenter)
-        top_splitter.addWidget(scroll1)
+        self.top_splitter.addWidget(scroll1)
     
-        # Part 2 (Right): Text Display without extra outline
+        self.part2_container = Part2Container()
         scroll2 = QScrollArea()
-        part2 = QWidget()  # Use plain QWidget
-        scroll2.setWidget(part2)
+        scroll2.setFrameStyle(QFrame.NoFrame)
+        scroll2.setWidget(self.part2_container)
         scroll2.setWidgetResizable(True)
-        self.text_display = QLabel()
-        self.text_display.setAlignment(Qt.AlignCenter)
-        layout2 = QVBoxLayout(part2)
-        layout2.setContentsMargins(0, 0, 0, 0)
-        layout2.addWidget(self.text_display, alignment=Qt.AlignCenter)
-        top_splitter.addWidget(scroll2)
+        self.top_splitter.addWidget(scroll2)
     
-        vertical_splitter.addWidget(top_splitter)
+        self.part1_container.text_edit.textChanged.connect(
+            lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText()))
     
-        # --- Bottom Section: Part 3 spanning full width ---
+        self.vertical_splitter.addWidget(self.top_splitter)
+    
+        self.part3_container = Part3Container()
         scroll3 = QScrollArea()
-        part3 = QWidget()  # Use plain QWidget to avoid an extra outline
-        scroll3.setWidget(part3)
+        scroll3.setFrameStyle(QFrame.NoFrame)
+        scroll3.setWidget(self.part3_container)
         scroll3.setWidgetResizable(True)
+        self.vertical_splitter.addWidget(scroll3)
     
-        self.part3_container = QWidget()
-        self.part3_layout = QHBoxLayout(self.part3_container)
-        self.part3_layout.setContentsMargins(0, 0, 0, 0)
-        self.part3_layout.setSpacing(10)
+        main_layout.addWidget(self.vertical_splitter)
     
-        self.part3_fields = []
-        for _ in range(3):  # Start with 3 fields
-            self.add_part3_field()
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        main_layout.addWidget(separator, alignment=Qt.AlignHCenter)
     
-        layout3 = QVBoxLayout(part3)
-        layout3.setContentsMargins(0, 0, 0, 0)
-        layout3.addWidget(self.part3_container)
-    
-        vertical_splitter.addWidget(scroll3)
-    
-        main_layout.addWidget(vertical_splitter)
-    
-        # Settings icon at the bottom
-        bottom_bar = QVBoxLayout()
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        bottom_bar.addWidget(line)
+        # Bottom area wrapper with a darker background and reduced height.
+        bottom_frame = QFrame()
+        bottom_frame.setFixedHeight(60)
+        bottom_frame.setStyleSheet("background-color: #2a2a2a;")
+        bottom_layout = QHBoxLayout(bottom_frame)
+        bottom_layout.setContentsMargins(5, 5, 5, 5)
+        bottom_layout.setSpacing(5)
     
         self.settings_icon = ClickableLabel("⚙")
+        self.settings_icon.setFixedSize(40, 40)
         self.settings_icon.clicked.connect(self.show_settings_menu)
-        bottom_bar.addWidget(self.settings_icon, alignment=Qt.AlignLeft)
+        bottom_layout.addWidget(self.settings_icon)
     
-        main_layout.addLayout(bottom_bar)
+        mode_container = QHBoxLayout()
+        self.mode_label = QLabel("Dark Mode" if self.current_bg == self.dark_bg else "Light Mode")
+        mode_container.addWidget(self.mode_label)
+        self.mode_toggle = ToggleSwitch()
+        self.mode_toggle.toggled.connect(self.handle_mode_change)
+        mode_container.addWidget(self.mode_toggle)
+        bottom_layout.addLayout(mode_container)
     
-        self.central.installEventFilter(self)
-
-    def add_part3_field(self):
-        field = TextFieldWithHeader()
-        field.setMinimumWidth(220)
-        self.part3_fields.append(field)
-        self.part3_layout.addWidget(field)
-
-    def adjust_part3_layout(self):
-        available_width = self.part3_container.width()
-        min_field_width = 220  # 200 + margins
-        fields_per_row = max(1, available_width // min_field_width)
-        
-        # Clear and re-add fields with wrapping
-        while self.part3_layout.count():
-            item = self.part3_layout.takeAt(0)
-            if item.widget():
-                item.widget().hide()
-                
-        current_row = QHBoxLayout()
-        current_row.setSpacing(10)
-        for i, field in enumerate(self.part3_fields):
-            if i % fields_per_row == 0 and i != 0:
-                self.part3_layout.addLayout(current_row)
-                current_row = QHBoxLayout()
-                current_row.setSpacing(10)
-            current_row.addWidget(field)
-        self.part3_layout.addLayout(current_row)
-
+        main_layout.addWidget(bottom_frame)
+    
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.initial_reset_done:
+            QTimer.singleShot(0, self.reset_layout)
+            self.initial_reset_done = True
+    
+    def reset_layout(self):
+        total_v = sum(self.vertical_splitter.sizes())
+        self.vertical_splitter.setSizes([total_v // 2, total_v - total_v // 2])
+        total_h = sum(self.top_splitter.sizes())
+        if total_h == 0:
+            total_h = 1000
+        self.top_splitter.setSizes([total_h // 3, total_h - total_h // 3])
+    
     def update_part3_fields(self, count):
-        # Adjust number of fields based on spin box value
-        while len(self.part3_fields) > count:
-            field = self.part3_fields.pop()
-            self.part3_layout.removeWidget(field)
-            field.deleteLater()
-        while len(self.part3_fields) < count:
-            self.add_part3_field()
+        self.part3_container.update_field_count(count)
         self.update_text_field_styles_dynamic(self.current_bg)
-
+    
     def show_settings_menu(self):
-        menu_width = int(self.width() * 0.4)
-        menu_height = int(self.height() * 0.4)
+        menu_width = int(self.height() * 0.4)
+        menu_height = int(self.width() * 0.3)
         self.settings_menu.setFixedSize(menu_width, menu_height)
         x = (self.width() - menu_width) // 2
         y = (self.height() - menu_height) // 2
         self.settings_menu.move(x, y)
         self.settings_menu.show()
-
+    
     def eventFilter(self, obj, event):
-        if obj == self.central and event.type() == QEvent.MouseButtonPress:
-            if self.settings_menu.isVisible() and not self.settings_menu.geometry().contains(event.pos()):
+        if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
+            global_rect = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
+                                self.settings_menu.size())
+            if not global_rect.contains(event.globalPos()):
                 self.settings_menu.hide()
         return super().eventFilter(obj, event)
-
+    
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.settings_menu.isVisible():
-            menu_width = int(self.width() * 0.4)
-            menu_height = int(self.height() * 0.4)
+            menu_width = int(self.height() * 0.4)
+            menu_height = int(self.width() * 0.3)
             self.settings_menu.setFixedSize(menu_width, menu_height)
             x = (self.width() - menu_width) // 2
             y = (self.height() - menu_height) // 2
             self.settings_menu.move(x, y)
-
+    
     def handle_mode_change(self, dark_mode):
         if self.animating:
             return
-        # Lock toggle during transition
-        self.settings_menu.toggle.lock(True)
+        self.mode_toggle.lock(True)
         target_bg = self.dark_bg if dark_mode else self.light_bg
         target_text = self.dark_text if dark_mode else self.light_text
+        self.mode_label.setText("Dark Mode" if dark_mode else "Light Mode")
         self.animating = True
-        self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, 500)
-        self.settings_menu.update_mode(dark_mode)
-
-    def animate_color_change(self, start_bg, end_bg, start_text, end_text, duration):
+        self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, 500, dark_mode)
+    
+    def animate_color_change(self, start_bg, end_bg, start_text, end_text, duration, dark_mode):
         steps = 20
         interval = duration // steps
         self.step = 0
-
         def update():
             factor = self.step / steps
             new_bg = interpolate_color(start_bg, end_bg, factor)
@@ -377,15 +472,13 @@ class MainWindow(QMainWindow):
                 self.current_bg = end_bg
                 self.current_text = end_text
                 self.animating = False
-                # Unlock toggle after animation
-                self.settings_menu.toggle.lock(False)
-
+                self.mode_toggle.lock(False)
+                self.settings_menu.update_mode(dark_mode)
         self.timer = QTimer(self)
         self.timer.timeout.connect(update)
         self.timer.start(interval)
-
+    
     def update_text_field_styles_dynamic(self, bg_color):
-        # Calculate factor: 0 for light_bg, 1 for dark_bg
         factor = (255 - bg_color[0]) / (255 - 45)
         new_bg = interpolate_color(self.textfield_bg_light, self.textfield_bg_dark, factor)
         new_border = interpolate_color(self.textfield_border_light, self.textfield_border_dark, factor)
@@ -399,18 +492,47 @@ class MainWindow(QMainWindow):
                 border: 1px solid {border_hex};
                 border-radius: 8px;
                 color: {text_hex};
+                font-size: 13px;
             }}
         """
-        self.text_input.setStyleSheet(style)
-        for field in self.part3_fields:
+        self.part1_container.text_edit.setStyleSheet(style)
+        for field in self.part3_container.fields:
             field.text_edit.setStyleSheet(style)
-
+    
     def update_stylesheet(self, bg_color, text_color):
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: rgb({bg_color[0]}, {bg_color[1]}, {bg_color[2]});
                 color: rgb({text_color[0]}, {text_color[1]}, {text_color[2]});
-                font-size: 14px;
+                font-size: 13px;
+            }}
+            QScrollBar:vertical {{
+                border: none;
+                background: rgb({bg_color[0]}, {bg_color[1]}, {bg_color[2]});
+                width: 12px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgb({min(bg_color[0]+20,255)}, {min(bg_color[1]+20,255)}, {min(bg_color[2]+20,255)});
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                background: none;
+            }}
+            QScrollBar:horizontal {{
+                border: none;
+                background: rgb({bg_color[0]}, {bg_color[1]}, {bg_color[2]});
+                height: 12px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: rgb({min(bg_color[0]+20,255)}, {min(bg_color[1]+20,255)}, {min(bg_color[2]+20,255)});
+                min-width: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                background: none;
             }}
         """)
 
