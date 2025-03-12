@@ -1,9 +1,9 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy)
-from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient
+from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion
 
 def interpolate_color(start_color, end_color, factor):
     return (
@@ -11,6 +11,112 @@ def interpolate_color(start_color, end_color, factor):
         int(max(0, min(255, start_color[1] + (end_color[1] - start_color[1]) * factor))),
         int(max(0, min(255, start_color[2] + (end_color[2] - start_color[2]) * factor)))
     )
+
+# --- Custom Title Bar and its Button ---
+
+class TitleBarButton(QPushButton):
+    def __init__(self, base_color, hover_icon, parent=None):
+        super().__init__(parent)
+        self.base_color = QColor(base_color)
+        self.hover_icon = hover_icon
+        self.setFixedSize(16, 16)
+        self.setCursor(Qt.ArrowCursor)
+        self.setStyleSheet("border: none;")
+        self._hover = False
+
+    def enterEvent(self, event):
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        rect = self.rect()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self.base_color)
+        p.drawEllipse(rect)
+        if self._hover:
+            p.setPen(QPen(Qt.white, 1))
+            font = QFont("Arial", 8, QFont.Bold)
+            p.setFont(font)
+            fm = QFontMetrics(font)
+            txt = self.hover_icon
+            txt_w = fm.width(txt)
+            txt_h = fm.height()
+            x = (rect.width() - txt_w) / 2
+            y = (rect.height() + txt_h/2) / 2
+            p.drawText(QPoint(int(x), int(y)), txt)
+        p.end()
+
+class CustomTitleBar(QWidget):
+    def __init__(self, parent=None, title="RapidPrompt"):
+        super().__init__(parent)
+        self.setFixedHeight(15)  # Reduced height
+        self.title = title
+        self.setStyleSheet("background-color: #E0E0E0; border-bottom: 1px solid #aaa;")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(4)
+        # Left: icon and window title
+        self.iconLabel = QLabel(self)
+        pix = QPixmap("icon.png")
+        if pix.isNull():
+            # If icon.png is not found, display placeholder text
+            self.iconLabel.setText("ICON")
+        else:
+            scaled_pix = pix.scaledToHeight(self.height()-2, Qt.SmoothTransformation)
+            self.iconLabel.setPixmap(scaled_pix)
+        layout.addWidget(self.iconLabel)
+        self.titleLabel = QLabel(self.title, self)
+        self.titleLabel.setStyleSheet("font: bold 10px;")
+        layout.addWidget(self.titleLabel)
+        layout.addStretch()
+        # Right: window control buttons in order: close, maximize, minimize
+        self.btn_close = TitleBarButton("#FF3B30", "✕", self)
+        self.btn_max = TitleBarButton("#FF9500", "▢", self)
+        self.btn_min = TitleBarButton("#34C759", "–", self)
+        self.btn_close.clicked.connect(self.window().close)
+        self.btn_max.clicked.connect(self.toggle_max_restore)
+        self.btn_min.clicked.connect(self.window().showMinimized)
+        layout.addWidget(self.btn_close)
+        layout.addWidget(self.btn_max)
+        layout.addWidget(self.btn_min)
+
+    def toggle_max_restore(self):
+        if self.window().isMaximized():
+            self.window().showNormal()
+        else:
+            self.window().showMaximized()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._startPos = self.mapToGlobal(event.pos())
+            self._clickPos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if hasattr(self, '_startPos') and self._startPos:
+            diff = self.mapToGlobal(event.pos()) - self._startPos
+            new_pos = self.window().pos() + diff
+            self.window().move(new_pos)
+            self._startPos = self.mapToGlobal(event.pos())
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._startPos = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        self.toggle_max_restore()
+        super().mouseDoubleClickEvent(event)
+
+# --- Other Custom Widgets (functionality remains the same) ---
 
 class CustomOutlineFrame(QFrame):
     def __init__(self, position="middle", parent=None):
@@ -21,7 +127,6 @@ class CustomOutlineFrame(QFrame):
 
 class ToggleSwitch(QWidget):
     toggled = pyqtSignal(bool)
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(30, 20)
@@ -67,14 +172,13 @@ class ToggleSwitch(QWidget):
         p.drawEllipse(circle_rect)
         p.end()
 
-    circle_pos = pyqtProperty(int,
+    circle_pos = pyqtProperty(int, 
         lambda self: self._circle_pos,
         lambda self, pos: setattr(self, '_circle_pos', pos) or self.update())
 
 class CustomSplitterHandle(QSplitterHandle):
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
-
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -95,7 +199,6 @@ class CustomSplitterHandle(QSplitterHandle):
             p.setPen(QPen(Qt.gray, 1))
             p.drawLine(0, center_y, self.width(), center_y)
         p.end()
-
     def sizeHint(self):
         default = super().sizeHint()
         if self.orientation() == Qt.Horizontal:
@@ -152,13 +255,11 @@ class Part3Container(QWidget):
         self.fields = []
         for _ in range(3):
             self.add_field()
-
     def add_field(self):
         field = TextFieldWithHeader()
         field.setMinimumWidth(220)
         self.fields.append(field)
         self.layout.addWidget(field)
-
     def update_field_count(self, count):
         current_count = len(self.fields)
         if count > current_count:
@@ -233,7 +334,7 @@ class SettingsMenu(QFrame):
         layout.addStretch()
         self.reset_button.clicked.connect(lambda: self.parentWidget().parentWidget().reset_layout())
         self.close_button.clicked.connect(self.hide)
-    
+
     def update_mode(self, dark_mode):
         if dark_mode:
             self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
@@ -305,7 +406,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RapidPrompt")
         self.resize(1600, 900)
-    
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.light_bg = (255, 255, 255)
         self.dark_bg = (45, 45, 45)
         self.light_text = (0, 0, 0)
@@ -316,97 +418,87 @@ class MainWindow(QMainWindow):
         self.textfield_bg_dark = (58, 58, 58)
         self.textfield_border_light = (204, 204, 204)
         self.textfield_border_dark = (85, 85, 85)
-    
         self.animating = False
         self.timer = None
         self.initial_reset_done = False
-    
+        self.installEventFilter(self)
         self.init_ui()
         self.update_stylesheet(self.current_bg, self.current_text)
         self.update_text_field_styles_dynamic(self.current_bg)
-    
-        self.settings_menu = SettingsMenu(self.central)
+        self.settings_menu = SettingsMenu(self.central_widget)
         self.settings_menu.hide()
         self.settings_menu.update_mode(self.current_bg == self.dark_bg)
         self.settings_menu.output_spin_box.valueChanged.connect(self.update_part3_fields)
-    
-        self.installEventFilter(self)
-    
+
     def init_ui(self):
-        self.central = QWidget()
-        self.setCentralWidget(self.central)
-        main_layout = QVBoxLayout(self.central)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-    
+        self.central_widget = QWidget()
+        main_layout = QVBoxLayout(self.central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.title_bar = CustomTitleBar(self, "RapidPrompt")
+        main_layout.addWidget(self.title_bar)
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(10, 10, 10, 10)
         self.vertical_splitter = CustomSplitter(Qt.Vertical)
         self.vertical_splitter.setHandleWidth(15)
-    
         self.top_splitter = CustomSplitter(Qt.Horizontal)
         self.top_splitter.setHandleWidth(15)
-    
         self.part1_container = Part1Container()
         scroll1 = QScrollArea()
         scroll1.setFrameStyle(QFrame.NoFrame)
         scroll1.setWidget(self.part1_container)
         scroll1.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll1)
-    
         self.part2_container = Part2Container()
         scroll2 = QScrollArea()
         scroll2.setFrameStyle(QFrame.NoFrame)
         scroll2.setWidget(self.part2_container)
         scroll2.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll2)
-    
         self.part1_container.text_edit.textChanged.connect(
             lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText()))
-    
         self.vertical_splitter.addWidget(self.top_splitter)
-    
         self.part3_container = Part3Container()
         scroll3 = QScrollArea()
         scroll3.setFrameStyle(QFrame.NoFrame)
         scroll3.setWidget(self.part3_container)
         scroll3.setWidgetResizable(True)
         self.vertical_splitter.addWidget(scroll3)
-    
-        main_layout.addWidget(self.vertical_splitter)
-    
+        content_layout.addWidget(self.vertical_splitter)
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
         separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        main_layout.addWidget(separator, alignment=Qt.AlignHCenter)
-    
-        # Bottom area wrapper with a darker background and reduced height.
-        bottom_frame = QFrame()
-        bottom_frame.setFixedHeight(60)
-        bottom_frame.setStyleSheet("background-color: #2a2a2a;")
-        bottom_layout = QHBoxLayout(bottom_frame)
-        bottom_layout.setContentsMargins(5, 5, 5, 5)
+        content_layout.addWidget(separator, alignment=Qt.AlignHCenter)
+        bottom_bar_widget = QWidget()
+        bottom_bar_widget.setMaximumHeight(25)  # Reduced height
+        bottom_layout = QHBoxLayout(bottom_bar_widget)
         bottom_layout.setSpacing(5)
-    
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
         self.settings_icon = ClickableLabel("⚙")
         self.settings_icon.setFixedSize(40, 40)
         self.settings_icon.clicked.connect(self.show_settings_menu)
         bottom_layout.addWidget(self.settings_icon)
-    
-        mode_container = QHBoxLayout()
+        mode_layout = QHBoxLayout()
         self.mode_label = QLabel("Dark Mode" if self.current_bg == self.dark_bg else "Light Mode")
-        mode_container.addWidget(self.mode_label)
+        mode_layout.addWidget(self.mode_label)
         self.mode_toggle = ToggleSwitch()
         self.mode_toggle.toggled.connect(self.handle_mode_change)
-        mode_container.addWidget(self.mode_toggle)
-        bottom_layout.addLayout(mode_container)
-    
-        main_layout.addWidget(bottom_frame)
-    
+        mode_layout.addWidget(self.mode_toggle)
+        bottom_layout.addLayout(mode_layout)
+        content_layout.addWidget(bottom_bar_widget)
+        main_layout.addWidget(content_widget)
+        self.setCentralWidget(self.central_widget)
+        self.central_widget.installEventFilter(self)
+
     def showEvent(self, event):
         super().showEvent(event)
         if not self.initial_reset_done:
             QTimer.singleShot(0, self.reset_layout)
             self.initial_reset_done = True
-    
+
     def reset_layout(self):
         total_v = sum(self.vertical_splitter.sizes())
         self.vertical_splitter.setSizes([total_v // 2, total_v - total_v // 2])
@@ -414,11 +506,11 @@ class MainWindow(QMainWindow):
         if total_h == 0:
             total_h = 1000
         self.top_splitter.setSizes([total_h // 3, total_h - total_h // 3])
-    
+
     def update_part3_fields(self, count):
         self.part3_container.update_field_count(count)
         self.update_text_field_styles_dynamic(self.current_bg)
-    
+
     def show_settings_menu(self):
         menu_width = int(self.height() * 0.4)
         menu_height = int(self.width() * 0.3)
@@ -427,15 +519,16 @@ class MainWindow(QMainWindow):
         y = (self.height() - menu_height) // 2
         self.settings_menu.move(x, y)
         self.settings_menu.show()
-    
+
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
-            global_rect = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
-                                self.settings_menu.size())
-            if not global_rect.contains(event.globalPos()):
-                self.settings_menu.hide()
+        if event.type() == QEvent.MouseButtonPress:
+            if self.settings_menu.isVisible():
+                geo = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
+                            self.settings_menu.size())
+                if not geo.contains(event.globalPos()):
+                    self.settings_menu.hide()
         return super().eventFilter(obj, event)
-    
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.settings_menu.isVisible():
@@ -445,7 +538,22 @@ class MainWindow(QMainWindow):
             x = (self.width() - menu_width) // 2
             y = (self.height() - menu_height) // 2
             self.settings_menu.move(x, y)
-    
+        # Set rounded window mask
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), 8, 8)
+        region = QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(region)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        rect = self.rect()
+        rect.adjust(0, 0, -1, -1)
+        p.setPen(QPen(QColor("#444"), 1))
+        p.setBrush(QColor(self.current_bg[0], self.current_bg[1], self.current_bg[2]))
+        p.drawRoundedRect(rect, 8, 8)
+        p.end()
+
     def handle_mode_change(self, dark_mode):
         if self.animating:
             return
@@ -455,7 +563,7 @@ class MainWindow(QMainWindow):
         self.mode_label.setText("Dark Mode" if dark_mode else "Light Mode")
         self.animating = True
         self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, 500, dark_mode)
-    
+
     def animate_color_change(self, start_bg, end_bg, start_text, end_text, duration, dark_mode):
         steps = 20
         interval = duration // steps
@@ -477,7 +585,7 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(update)
         self.timer.start(interval)
-    
+
     def update_text_field_styles_dynamic(self, bg_color):
         factor = (255 - bg_color[0]) / (255 - 45)
         new_bg = interpolate_color(self.textfield_bg_light, self.textfield_bg_dark, factor)
@@ -498,9 +606,9 @@ class MainWindow(QMainWindow):
         self.part1_container.text_edit.setStyleSheet(style)
         for field in self.part3_container.fields:
             field.text_edit.setStyleSheet(style)
-    
+
     def update_stylesheet(self, bg_color, text_color):
-        self.setStyleSheet(f"""
+        self.central_widget.setStyleSheet(f"""
             QWidget {{
                 background-color: rgb({bg_color[0]}, {bg_color[1]}, {bg_color[2]});
                 color: rgb({text_color[0]}, {text_color[1]}, {text_color[2]});
