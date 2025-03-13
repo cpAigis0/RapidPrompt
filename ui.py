@@ -1,9 +1,9 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize, QPoint
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
-from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon
 
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
@@ -51,6 +51,7 @@ class CustomTitleBar(QWidget):
         self.setFixedHeight(25)
         self.window_title = window_title
         self.file_title = file_title if file_title else "~Untitled"
+        self._dragPos = None  # Initialize _dragPos to ensure safe usage
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -67,7 +68,6 @@ class CustomTitleBar(QWidget):
             self.iconLabel.setPixmap(scaled_pix)
         left_layout.addWidget(self.iconLabel)
         self.windowTitleLabel = QLabel(self.window_title, self)
-        # Directly apply dark mode styling
         self.windowTitleLabel.setStyleSheet("font: bold 10px; color: #E0E0E0; padding: 2px;")
         left_layout.addWidget(self.windowTitleLabel)
 
@@ -107,7 +107,7 @@ class CustomTitleBar(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.LeftButton:
+        if event.buttons() & Qt.LeftButton and self._dragPos is not None:
             self.window().move(event.globalPos() - self._dragPos)
         super().mouseMoveEvent(event)
 
@@ -188,18 +188,18 @@ class Part2Container(QWidget):
 class Part3Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(10)
         self.fields = []
+        self.spacing = 10
         for _ in range(4):
             self.add_field()
 
     def add_field(self):
         field = TextFieldWithHeader()
-        field.setMinimumWidth(220)
+        field.setMinimumWidth(200)
+        field.setMinimumHeight(300)
         self.fields.append(field)
-        self.layout.addWidget(field)
+        field.setParent(self)
+        field.show()
 
     def update_field_count(self, count):
         current_count = len(self.fields)
@@ -209,8 +209,47 @@ class Part3Container(QWidget):
         elif count < current_count:
             for _ in range(current_count - count):
                 field = self.fields.pop()
-                self.layout.removeWidget(field)
+                field.setParent(None)
                 field.deleteLater()
+        self.update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.relayout_fields()
+
+    def relayout_fields(self):
+        total = len(self.fields)
+        if total == 0:
+            return
+
+        w = self.width()
+        h = self.height()
+        spacing = self.spacing
+
+        minW = 200
+        minH = 300
+
+        max_columns_possible = max(1, (w + spacing) // (minW + spacing))
+        chosen_columns = max_columns_possible
+
+        for columns in range(max_columns_possible, 0, -1):
+            rows = (total + columns - 1) // columns
+            available_row_height = (h - (rows - 1) * spacing) / rows
+            if available_row_height >= minH:
+                chosen_columns = columns
+                break
+
+        rows = (total + chosen_columns - 1) // chosen_columns
+
+        widget_width = (w - (chosen_columns - 1) * spacing) / chosen_columns
+        widget_height = (h - (rows - 1) * spacing) / rows
+
+        for index, field in enumerate(self.fields):
+            row = index // chosen_columns
+            col = index % chosen_columns
+            x = col * (widget_width + spacing)
+            y = row * (widget_height + spacing)
+            field.setGeometry(int(x), int(y), int(widget_width), int(widget_height))
 
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
@@ -233,7 +272,6 @@ class ModalOverlay(QWidget):
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Apply dark mode styling directly in the constructor.
         self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -242,7 +280,6 @@ class SettingsMenu(QFrame):
         layout.addStretch() 
         
         self.standard_layout_button = QPushButton("Set Standard Layout")
-        # Updated for dark mode.
         self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
         self.standard_layout_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.standard_layout_button)
@@ -333,11 +370,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RapidPrompt")
+        self.setWindowIcon(QIcon("icon.png"))
         self.resize(1600, 900)
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        # Always in dark mode.
         self.dark_bg = (45, 45, 45)
         self.dark_text = (220, 220, 220)
         self.textfield_bg_dark = (58, 58, 58)
@@ -414,7 +451,6 @@ class MainWindow(QMainWindow):
         separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content_layout.addWidget(separator, alignment=Qt.AlignHCenter)
 
-        # Bottom bar now only holds the settings icon.
         self.bottom_bar_widget = QWidget(self)
         self.bottom_bar_widget.setMaximumHeight(50)
         self.bottom_bar_widget.setStyleSheet("background-color: rgb(%d, %d, %d);" % self.dark_bottom)
@@ -522,7 +558,6 @@ class MainWindow(QMainWindow):
         p.end()
 
     def update_text_field_styles_dynamic(self):
-        # Directly use dark mode colors.
         new_bg = self.textfield_bg_dark
         new_border = self.textfield_border_dark
         new_text_color = (255, 255, 255)
