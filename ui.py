@@ -57,19 +57,17 @@ class TitleBarButton(QPushButton):
 class CustomTitleBar(QWidget):
     def __init__(self, parent=None, window_title="RapidPrompt", file_title="~Untitled"):
         super().__init__(parent)
-        self.setFixedHeight(25)  # Adjusted height if needed
+        self.setFixedHeight(25)
         self.window_title = window_title
         self.file_title = file_title if file_title else "~Untitled"
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
 
         # Left container: icon and window title (no background)
         self.left_container = QWidget(self)
         left_layout = QHBoxLayout(self.left_container)
         left_layout.setContentsMargins(9, 0, 5, 0)
-        left_layout.setSpacing(5)
         self.iconLabel = QLabel(self)
         pix = QPixmap("icon.png")
         if pix.isNull():
@@ -79,21 +77,8 @@ class CustomTitleBar(QWidget):
             self.iconLabel.setPixmap(scaled_pix)
         left_layout.addWidget(self.iconLabel)
         self.windowTitleLabel = QLabel(self.window_title, self)
-        # No background; just set padding for spacing
         self.windowTitleLabel.setStyleSheet("font: bold 10px; padding: 2px;")
         left_layout.addWidget(self.windowTitleLabel)
-        main_layout.addWidget(self.left_container, 0)
-
-        # Center container: file title, centered
-        self.center_container = QWidget(self)
-        center_layout = QHBoxLayout(self.center_container)
-        center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setAlignment(Qt.AlignCenter)
-        self.fileTitleLabel = QLabel(self.file_title, self)
-        # No background; text styling only
-        self.fileTitleLabel.setStyleSheet("font: 10px; padding: 2px;")
-        center_layout.addWidget(self.fileTitleLabel)
-        main_layout.addWidget(self.center_container, 1)
 
         # Right container: control buttons
         self.right_container = QWidget(self)
@@ -109,7 +94,18 @@ class CustomTitleBar(QWidget):
         right_layout.addWidget(self.btn_min)
         right_layout.addWidget(self.btn_max)
         right_layout.addWidget(self.btn_close)
-        main_layout.addWidget(self.right_container, 0)
+
+        # File title label (to be centered in the entire title bar)
+        self.fileTitleLabel = QLabel(self.file_title, self)
+        self.fileTitleLabel.setStyleSheet("font: 10px; padding: 2px;")
+        self.fileTitleLabel.setAlignment(Qt.AlignCenter)
+
+        # Assemble layout with stretches to balance the file title in the center.
+        main_layout.addWidget(self.left_container)
+        main_layout.addStretch()
+        main_layout.addWidget(self.fileTitleLabel)
+        main_layout.addStretch()
+        main_layout.addWidget(self.right_container)
 
     def update_mode(self, dark_mode):
         # Remove any background updates – only adjust text contrast.
@@ -302,7 +298,6 @@ class Part3Container(QWidget):
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Ensure the overlay captures all mouse events and shows a semi-transparent background
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 50);")
@@ -313,7 +308,14 @@ class ModalOverlay(QWidget):
         super().resizeEvent(event)
     
     def mousePressEvent(self, event):
-        # Close the settings menu and hide the overlay when clicked
+        clicked_widget = self.childAt(event.pos())
+        settings_menu = self.parent().settings_menu if self.parent() and hasattr(self.parent(), 'settings_menu') else None
+
+        while clicked_widget and settings_menu:
+            if clicked_widget == settings_menu:
+                return super().mousePressEvent(event)
+            clicked_widget = clicked_widget.parent()
+
         event.accept()
         if self.parent() and hasattr(self.parent(), 'settings_menu'):
             self.parent().settings_menu.hide_with_fade()
@@ -322,26 +324,32 @@ class ModalOverlay(QWidget):
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("QFrame { background-color: #f0f0f0; border: 2px solid #888; border-radius: 8px; }")
+        # Use a smaller margin so the menu wraps the buttons more closely.
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins
         layout.setSpacing(5)
-        layout.addStretch()
+        
+        layout.addStretch()  # Optional: if you want to push buttons to the center vertically
+        
+        # Create buttons with rounded corners.
         self.export_button = QPushButton("Export Layout")
-        self.export_button.setStyleSheet("padding: 8px;")
+        self.export_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
         self.export_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.export_button)
+        
         self.import_button = QPushButton("Import Layout")
-        self.import_button.setStyleSheet("padding: 8px;")
+        self.import_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
         self.import_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.import_button)
+        
         layout.addSpacing(15)
+        
         output_layout = QHBoxLayout()
         self.output_label = QLabel("Output Fields:")
         output_layout.addWidget(self.output_label)
         self.output_spin_box = QSpinBox()
         self.output_spin_box.setMinimum(1)
-        self.output_spin_box.setValue(4)  # default now 4
+        self.output_spin_box.setValue(4)
         self.output_spin_box.setStyleSheet("""
             QSpinBox {
                 padding: 4px;
@@ -370,23 +378,30 @@ class SettingsMenu(QFrame):
         """)
         output_layout.addWidget(self.output_spin_box)
         layout.addLayout(output_layout)
+        
         layout.addSpacing(15)
+        
         self.reset_button = QPushButton("Reset Layout")
-        self.reset_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+        self.reset_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #aaa; color: black;")
         self.reset_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.reset_button)
+        
         self.close_button = QPushButton("Close")
-        self.close_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
+        self.close_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #aaa; color: black;")
         self.close_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.close_button)
-        layout.addStretch()
-        self.reset_button.clicked.connect(lambda: self.parentWidget().parentWidget().reset_layout())
+        
+        layout.addStretch()  # Optional: if you want extra space at the bottom
+        
+        # Keep the same connections as before.
+        self.reset_button.clicked.connect(lambda: self.window().reset_layout())
         self.close_button.clicked.connect(self.hide_with_fade)
         
         # Setup opacity effect for fade animations
         self.effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.effect)
         self.effect.setOpacity(0)
+
     
     def fade_in(self):
         self.show()
@@ -613,14 +628,19 @@ class MainWindow(QMainWindow):
         self.overlay.show()
         self.overlay.raise_()
         
-        # Reparent the settings menu to the overlay so it appears on top
         self.settings_menu.setParent(self.overlay)
-        menu_width = int(self.height() * 0.4)
-        menu_height = int(self.width() * 0.3)
-        self.settings_menu.setFixedSize(menu_width, menu_height)
-        x = (self.overlay.width() - menu_width) // 2
-        y = (self.overlay.height() - menu_height) // 2
-        self.settings_menu.move(x, y)
+        self.settings_menu.adjustSize()
+        self.settings_menu.setFixedSize(self.settings_menu.sizeHint())
+
+        icon_pos = self.settings_icon.mapTo(self.central_widget, QPoint(0, 0))
+        gap = 5
+        menu_width = self.settings_menu.width()
+        menu_height = self.settings_menu.height()
+
+        new_x = icon_pos.x()
+        new_y = icon_pos.y() - gap - menu_height
+        self.settings_menu.move(new_x, new_y)
+
         self.settings_menu.fade_in()
         self.settings_menu.raise_()
 
