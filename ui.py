@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint, QParallelAnimationGroup
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
@@ -308,14 +308,6 @@ class ModalOverlay(QWidget):
         super().resizeEvent(event)
     
     def mousePressEvent(self, event):
-        clicked_widget = self.childAt(event.pos())
-        settings_menu = self.parent().settings_menu if self.parent() and hasattr(self.parent(), 'settings_menu') else None
-
-        while clicked_widget and settings_menu:
-            if clicked_widget == settings_menu:
-                return super().mousePressEvent(event)
-            clicked_widget = clicked_widget.parent()
-
         event.accept()
         if self.parent() and hasattr(self.parent(), 'settings_menu'):
             self.parent().settings_menu.hide_with_fade()
@@ -324,14 +316,17 @@ class ModalOverlay(QWidget):
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Use a smaller margin so the menu wraps the buttons more closely.
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
         
-        layout.addStretch()  # Optional: if you want to push buttons to the center vertically
+        layout.addStretch() 
         
-        # Create buttons with rounded corners.
+        self.standard_layout_button = QPushButton("Set Standard Layout")
+        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
+        self.standard_layout_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self.standard_layout_button)
+
         self.export_button = QPushButton("Export Layout")
         self.export_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
         self.export_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -343,7 +338,6 @@ class SettingsMenu(QFrame):
         layout.addWidget(self.import_button)
         
         layout.addSpacing(15)
-        
         output_layout = QHBoxLayout()
         self.output_label = QLabel("Output Fields:")
         output_layout.addWidget(self.output_label)
@@ -380,7 +374,6 @@ class SettingsMenu(QFrame):
         layout.addLayout(output_layout)
         
         layout.addSpacing(15)
-        
         self.reset_button = QPushButton("Reset Layout")
         self.reset_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #aaa; color: black;")
         self.reset_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -391,33 +384,59 @@ class SettingsMenu(QFrame):
         self.close_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.close_button)
         
-        layout.addStretch()  # Optional: if you want extra space at the bottom
-        
-        # Keep the same connections as before.
+        layout.addStretch()
+
         self.reset_button.clicked.connect(lambda: self.window().reset_layout())
         self.close_button.clicked.connect(self.hide_with_fade)
         
-        # Setup opacity effect for fade animations
         self.effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.effect)
         self.effect.setOpacity(0)
 
-    
     def fade_in(self):
+        target_pos = self.pos()
+        start_pos = target_pos + QPoint(0, self.height())
+        self.move(start_pos)
         self.show()
-        self.anim = QPropertyAnimation(self.effect, b"opacity")
-        self.anim.setDuration(200)
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
-        self.anim.start()
-    
+        
+        self.anim_group = QParallelAnimationGroup(self)
+        
+        opacity_anim = QPropertyAnimation(self.effect, b"opacity")
+        opacity_anim.setDuration(200)
+        opacity_anim.setStartValue(0)
+        opacity_anim.setEndValue(1)
+        opacity_anim.setEasingCurve(QEasingCurve.InOutCubic)
+        
+        pos_anim = QPropertyAnimation(self, b"pos")
+        pos_anim.setDuration(200)
+        pos_anim.setStartValue(start_pos)
+        pos_anim.setEndValue(target_pos)
+        pos_anim.setEasingCurve(QEasingCurve.InOutCubic)
+        
+        self.anim_group.addAnimation(opacity_anim)
+        self.anim_group.addAnimation(pos_anim)
+        self.anim_group.start()
+
     def hide_with_fade(self):
-        self.anim = QPropertyAnimation(self.effect, b"opacity")
-        self.anim.setDuration(200)
-        self.anim.setStartValue(self.effect.opacity())
-        self.anim.setEndValue(0)
-        self.anim.finished.connect(self.hide)
-        self.anim.start()
+        target_pos = self.pos() + QPoint(0, self.height())
+        self.anim_group = QParallelAnimationGroup(self)
+        
+        opacity_anim = QPropertyAnimation(self.effect, b"opacity")
+        opacity_anim.setDuration(200)
+        opacity_anim.setStartValue(self.effect.opacity())
+        opacity_anim.setEndValue(0)
+        opacity_anim.setEasingCurve(QEasingCurve.InOutCubic)
+        
+        pos_anim = QPropertyAnimation(self, b"pos")
+        pos_anim.setDuration(200)
+        pos_anim.setStartValue(self.pos())
+        pos_anim.setEndValue(target_pos)
+        pos_anim.setEasingCurve(QEasingCurve.InOutCubic)
+        
+        self.anim_group.addAnimation(opacity_anim)
+        self.anim_group.addAnimation(pos_anim)
+        self.anim_group.finished.connect(self.hide)
+        self.anim_group.start()
     
     def update_mode(self, dark_mode):
         if dark_mode:
