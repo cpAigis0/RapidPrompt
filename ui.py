@@ -188,15 +188,20 @@ class Part2Container(QWidget):
 class Part3Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # We no longer use a layout; we position each combi manually.
         self.fields = []
-        self.spacing = 10
+        self.spacing = 10  # space between combis
+
+        # Create 4 combis initially.
         for _ in range(4):
             self.add_field()
 
     def add_field(self):
         field = TextFieldWithHeader()
+        # Set a minimum width of 200 (to allow tweaking later)
         field.setMinimumWidth(200)
-        field.setMinimumHeight(300)
+        # Each combi has a fixed height of 250 pixels.
+        field.setFixedHeight(250)
         self.fields.append(field)
         field.setParent(self)
         field.show()
@@ -211,7 +216,7 @@ class Part3Container(QWidget):
                 field = self.fields.pop()
                 field.setParent(None)
                 field.deleteLater()
-        self.update()
+        self.relayout_fields()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -222,34 +227,38 @@ class Part3Container(QWidget):
         if total == 0:
             return
 
-        w = self.width()
-        h = self.height()
         spacing = self.spacing
+        container_width = self.width()
 
-        minW = 200
-        minH = 300
+        # We allow a maximum of 6 combis per row.
+        full_columns = 6
+        rows = (total + full_columns - 1) // full_columns  # ceiling division
 
-        max_columns_possible = max(1, (w + spacing) // (minW + spacing))
-        chosen_columns = max_columns_possible
+        # Compute total content height and update minimum height so that
+        # the QScrollArea recognizes the full extent of the content.
+        total_height = rows * 250 + (rows - 1) * spacing
+        self.setMinimumHeight(int(total_height))
 
-        for columns in range(max_columns_possible, 0, -1):
-            rows = (total + columns - 1) // columns
-            available_row_height = (h - (rows - 1) * spacing) / rows
-            if available_row_height >= minH:
-                chosen_columns = columns
-                break
+        for row in range(rows):
+            start_index = row * full_columns
+            # Determine how many combis are in this row.
+            if row == rows - 1:
+                count_in_row = total - start_index
+            else:
+                count_in_row = full_columns
 
-        rows = (total + chosen_columns - 1) // chosen_columns
+            # For a full row, each combi's width is container_width divided by 6 (minus spacing).
+            # For a partial row, stretch the combis to fill the available width.
+            if count_in_row > 0:
+                cell_width = (container_width - (count_in_row - 1) * spacing) / count_in_row
+            else:
+                cell_width = container_width
 
-        widget_width = (w - (chosen_columns - 1) * spacing) / chosen_columns
-        widget_height = (h - (rows - 1) * spacing) / rows
-
-        for index, field in enumerate(self.fields):
-            row = index // chosen_columns
-            col = index % chosen_columns
-            x = col * (widget_width + spacing)
-            y = row * (widget_height + spacing)
-            field.setGeometry(int(x), int(y), int(widget_width), int(widget_height))
+            y = row * (250 + spacing)
+            for i in range(count_in_row):
+                index = start_index + i
+                x = i * (cell_width + spacing)
+                self.fields[index].setGeometry(int(x), int(y), int(cell_width), 250)
 
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
@@ -442,6 +451,7 @@ class MainWindow(QMainWindow):
         scroll3.setFrameStyle(QFrame.NoFrame)
         scroll3.setWidget(self.part3_container)
         scroll3.setWidgetResizable(True)
+        scroll3.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.vertical_splitter.addWidget(scroll3)
 
         content_layout.addWidget(self.vertical_splitter)
