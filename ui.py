@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
-                             QTextEdit, QLineEdit, QSizePolicy)
+                             QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
 from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion
 
 def interpolate_color(start_color, end_color, factor):
@@ -19,7 +19,7 @@ class TitleBarButton(QPushButton):
         super().__init__(parent)
         self.base_color = QColor(base_color)
         self.hover_icon = hover_icon
-        self.setFixedSize(16, 16)
+        self.setFixedSize(12, 12)
         self.setCursor(Qt.ArrowCursor)
         self.setStyleSheet("border: none;")
         self._hover = False
@@ -43,7 +43,7 @@ class TitleBarButton(QPushButton):
         p.drawEllipse(rect)
         if self._hover:
             p.setPen(QPen(Qt.white, 1))
-            font = QFont("Arial", 8, QFont.Bold)
+            font = QFont("Arial", 6, QFont.Bold)
             p.setFont(font)
             fm = QFontMetrics(font)
             txt = self.hover_icon
@@ -55,38 +55,68 @@ class TitleBarButton(QPushButton):
         p.end()
 
 class CustomTitleBar(QWidget):
-    def __init__(self, parent=None, title="RapidPrompt"):
+    def __init__(self, parent=None, window_title="RapidPrompt", file_title="~Untitled"):
         super().__init__(parent)
-        self.setFixedHeight(15)  # Reduced height
-        self.title = title
-        self.setStyleSheet("background-color: #E0E0E0; border-bottom: 1px solid #aaa;")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 0, 4, 0)
-        layout.setSpacing(4)
-        # Left: icon and window title
+        self.setFixedHeight(25)  # Adjusted height if needed
+        self.window_title = window_title
+        self.file_title = file_title if file_title else "~Untitled"
+
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Left container: icon and window title (no background)
+        self.left_container = QWidget(self)
+        left_layout = QHBoxLayout(self.left_container)
+        left_layout.setContentsMargins(9, 0, 5, 0)
+        left_layout.setSpacing(5)
         self.iconLabel = QLabel(self)
         pix = QPixmap("icon.png")
         if pix.isNull():
-            # If icon.png is not found, display placeholder text
             self.iconLabel.setText("ICON")
         else:
-            scaled_pix = pix.scaledToHeight(self.height()-2, Qt.SmoothTransformation)
+            scaled_pix = pix.scaledToHeight(self.height() - 4, Qt.SmoothTransformation)
             self.iconLabel.setPixmap(scaled_pix)
-        layout.addWidget(self.iconLabel)
-        self.titleLabel = QLabel(self.title, self)
-        self.titleLabel.setStyleSheet("font: bold 10px;")
-        layout.addWidget(self.titleLabel)
-        layout.addStretch()
-        # Right: window control buttons in order: close, maximize, minimize
-        self.btn_close = TitleBarButton("#FF3B30", "✕", self)
-        self.btn_max = TitleBarButton("#FF9500", "▢", self)
+        left_layout.addWidget(self.iconLabel)
+        self.windowTitleLabel = QLabel(self.window_title, self)
+        # No background; just set padding for spacing
+        self.windowTitleLabel.setStyleSheet("font: bold 10px; padding: 2px;")
+        left_layout.addWidget(self.windowTitleLabel)
+        main_layout.addWidget(self.left_container, 0)
+
+        # Center container: file title, centered
+        self.center_container = QWidget(self)
+        center_layout = QHBoxLayout(self.center_container)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setAlignment(Qt.AlignCenter)
+        self.fileTitleLabel = QLabel(self.file_title, self)
+        # No background; text styling only
+        self.fileTitleLabel.setStyleSheet("font: 10px; padding: 2px;")
+        center_layout.addWidget(self.fileTitleLabel)
+        main_layout.addWidget(self.center_container, 1)
+
+        # Right container: control buttons
+        self.right_container = QWidget(self)
+        right_layout = QHBoxLayout(self.right_container)
+        right_layout.setContentsMargins(0, 0, 9, 0)
+        right_layout.setSpacing(4)
         self.btn_min = TitleBarButton("#34C759", "–", self)
-        self.btn_close.clicked.connect(self.window().close)
-        self.btn_max.clicked.connect(self.toggle_max_restore)
+        self.btn_max = TitleBarButton("#FF9500", "▢", self)
+        self.btn_close = TitleBarButton("#FF3B30", "✕", self)
         self.btn_min.clicked.connect(self.window().showMinimized)
-        layout.addWidget(self.btn_close)
-        layout.addWidget(self.btn_max)
-        layout.addWidget(self.btn_min)
+        self.btn_max.clicked.connect(self.toggle_max_restore)
+        self.btn_close.clicked.connect(self.window().close)
+        right_layout.addWidget(self.btn_min)
+        right_layout.addWidget(self.btn_max)
+        right_layout.addWidget(self.btn_close)
+        main_layout.addWidget(self.right_container, 0)
+
+    def update_mode(self, dark_mode):
+        # Remove any background updates – only adjust text contrast.
+        text_color = "#E0E0E0" if dark_mode else "#000000"
+        self.windowTitleLabel.setStyleSheet(f"font: bold 10px; color: {text_color}; padding: 2px;")
+        self.fileTitleLabel.setStyleSheet(f"font: 10px; color: {text_color}; padding: 2px;")
+        self.iconLabel.setStyleSheet(f"color: {text_color};")
 
     def toggle_max_restore(self):
         if self.window().isMaximized():
@@ -94,29 +124,23 @@ class CustomTitleBar(QWidget):
         else:
             self.window().showMaximized()
 
+    # --- Improved Dragging Code for Smoother Movement ---
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._startPos = self.mapToGlobal(event.pos())
-            self._clickPos = event.pos()
+            # Record the fixed offset from the window's top-left corner.
+            self._dragPos = event.globalPos() - self.window().frameGeometry().topLeft()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if hasattr(self, '_startPos') and self._startPos:
-            diff = self.mapToGlobal(event.pos()) - self._startPos
-            new_pos = self.window().pos() + diff
-            self.window().move(new_pos)
-            self._startPos = self.mapToGlobal(event.pos())
+        if event.buttons() & Qt.LeftButton:
+            self.window().move(event.globalPos() - self._dragPos)
         super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        self._startPos = None
-        super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         self.toggle_max_restore()
         super().mouseDoubleClickEvent(event)
 
-# --- Other Custom Widgets (functionality remains the same) ---
+# --- Other Custom Widgets ---
 
 class CustomOutlineFrame(QFrame):
     def __init__(self, position="middle", parent=None):
@@ -241,10 +265,12 @@ class Part2Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignCenter)
+        # Make the label text selectable (for marking) but not editable.
+        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.label)
+
 
 class Part3Container(QWidget):
     def __init__(self, parent=None):
@@ -253,13 +279,15 @@ class Part3Container(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(10)
         self.fields = []
-        for _ in range(3):
+        for _ in range(4):  # Always start with 4 fields
             self.add_field()
+
     def add_field(self):
         field = TextFieldWithHeader()
         field.setMinimumWidth(220)
         self.fields.append(field)
         self.layout.addWidget(field)
+
     def update_field_count(self, count):
         current_count = len(self.fields)
         if count > current_count:
@@ -270,6 +298,26 @@ class Part3Container(QWidget):
                 field = self.fields.pop()
                 self.layout.removeWidget(field)
                 field.deleteLater()
+
+class ModalOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Ensure the overlay captures all mouse events and shows a semi-transparent background
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setStyleSheet("background-color: rgba(0, 0, 0, 50);")
+        self.setGeometry(parent.rect())
+    
+    def resizeEvent(self, event):
+        self.setGeometry(self.parent().rect())
+        super().resizeEvent(event)
+    
+    def mousePressEvent(self, event):
+        # Close the settings menu and hide the overlay when clicked
+        event.accept()
+        if self.parent() and hasattr(self.parent(), 'settings_menu'):
+            self.parent().settings_menu.hide_with_fade()
+        self.hide()
 
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
@@ -293,7 +341,7 @@ class SettingsMenu(QFrame):
         output_layout.addWidget(self.output_label)
         self.output_spin_box = QSpinBox()
         self.output_spin_box.setMinimum(1)
-        self.output_spin_box.setValue(3)
+        self.output_spin_box.setValue(4)  # default now 4
         self.output_spin_box.setStyleSheet("""
             QSpinBox {
                 padding: 4px;
@@ -333,8 +381,29 @@ class SettingsMenu(QFrame):
         layout.addWidget(self.close_button)
         layout.addStretch()
         self.reset_button.clicked.connect(lambda: self.parentWidget().parentWidget().reset_layout())
-        self.close_button.clicked.connect(self.hide)
-
+        self.close_button.clicked.connect(self.hide_with_fade)
+        
+        # Setup opacity effect for fade animations
+        self.effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.effect)
+        self.effect.setOpacity(0)
+    
+    def fade_in(self):
+        self.show()
+        self.anim = QPropertyAnimation(self.effect, b"opacity")
+        self.anim.setDuration(200)
+        self.anim.setStartValue(0)
+        self.anim.setEndValue(1)
+        self.anim.start()
+    
+    def hide_with_fade(self):
+        self.anim = QPropertyAnimation(self.effect, b"opacity")
+        self.anim.setDuration(200)
+        self.anim.setStartValue(self.effect.opacity())
+        self.anim.setEndValue(0)
+        self.anim.finished.connect(self.hide)
+        self.anim.start()
+    
     def update_mode(self, dark_mode):
         if dark_mode:
             self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
@@ -408,6 +477,8 @@ class MainWindow(QMainWindow):
         self.resize(1600, 900)
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+        # -- Light/Dark Colors --
         self.light_bg = (255, 255, 255)
         self.dark_bg = (45, 45, 45)
         self.light_text = (0, 0, 0)
@@ -418,6 +489,9 @@ class MainWindow(QMainWindow):
         self.textfield_bg_dark = (58, 58, 58)
         self.textfield_border_light = (204, 204, 204)
         self.textfield_border_dark = (85, 85, 85)
+        self.dark_bottom = (51, 51, 51)
+        self.light_bottom = (224, 224, 224)
+
         self.animating = False
         self.timer = None
         self.initial_reset_done = False
@@ -435,60 +509,81 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(self.central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+    
+        # --- Title Bar ---
         self.title_bar = CustomTitleBar(self, "RapidPrompt")
+        self.title_bar.update_mode(self.current_bg == self.dark_bg)
         main_layout.addWidget(self.title_bar)
+    
+        # --- Content Area ---
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(10, 10, 10, 10)
+    
         self.vertical_splitter = CustomSplitter(Qt.Vertical)
         self.vertical_splitter.setHandleWidth(15)
         self.top_splitter = CustomSplitter(Qt.Horizontal)
         self.top_splitter.setHandleWidth(15)
+    
         self.part1_container = Part1Container()
         scroll1 = QScrollArea()
         scroll1.setFrameStyle(QFrame.NoFrame)
         scroll1.setWidget(self.part1_container)
         scroll1.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll1)
+    
         self.part2_container = Part2Container()
         scroll2 = QScrollArea()
         scroll2.setFrameStyle(QFrame.NoFrame)
         scroll2.setWidget(self.part2_container)
         scroll2.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll2)
+    
         self.part1_container.text_edit.textChanged.connect(
             lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText()))
         self.vertical_splitter.addWidget(self.top_splitter)
+    
         self.part3_container = Part3Container()
         scroll3 = QScrollArea()
         scroll3.setFrameStyle(QFrame.NoFrame)
         scroll3.setWidget(self.part3_container)
         scroll3.setWidgetResizable(True)
         self.vertical_splitter.addWidget(scroll3)
+    
         content_layout.addWidget(self.vertical_splitter)
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
         separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content_layout.addWidget(separator, alignment=Qt.AlignHCenter)
-        bottom_bar_widget = QWidget()
-        bottom_bar_widget.setMaximumHeight(25)  # Reduced height
-        bottom_layout = QHBoxLayout(bottom_bar_widget)
+    
+        # --- Bottom Bar ---
+        self.bottom_bar_widget = QWidget(self)
+        self.bottom_bar_widget.setMaximumHeight(30)
+        self.bottom_bar_widget.setStyleSheet("background-color: #333333;")
+        bottom_layout = QHBoxLayout(self.bottom_bar_widget)
         bottom_layout.setSpacing(5)
-        bottom_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_layout.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        bottom_layout.setContentsMargins(5, 0, 5, 0)
+    
+        # Settings icon on the left with contrasting text color
         self.settings_icon = ClickableLabel("⚙")
-        self.settings_icon.setFixedSize(40, 40)
+        self.settings_icon.setFixedSize(20, 20)
+        self.settings_icon.setStyleSheet("color: #ffffff;")
         self.settings_icon.clicked.connect(self.show_settings_menu)
         bottom_layout.addWidget(self.settings_icon)
-        mode_layout = QHBoxLayout()
+    
+        bottom_layout.addStretch()  # Spacer to push dark/light controls to the right
+    
         self.mode_label = QLabel("Dark Mode" if self.current_bg == self.dark_bg else "Light Mode")
-        mode_layout.addWidget(self.mode_label)
+        self.mode_label.setAlignment(Qt.AlignVCenter)
+        self.mode_label.setStyleSheet("color: #ffffff;")
+        bottom_layout.addWidget(self.mode_label)
+    
         self.mode_toggle = ToggleSwitch()
         self.mode_toggle.toggled.connect(self.handle_mode_change)
-        mode_layout.addWidget(self.mode_toggle)
-        bottom_layout.addLayout(mode_layout)
-        content_layout.addWidget(bottom_bar_widget)
+        bottom_layout.addWidget(self.mode_toggle)
+    
+        content_layout.addWidget(self.bottom_bar_widget)
         main_layout.addWidget(content_widget)
         self.setCentralWidget(self.central_widget)
         self.central_widget.installEventFilter(self)
@@ -512,22 +607,32 @@ class MainWindow(QMainWindow):
         self.update_text_field_styles_dynamic(self.current_bg)
 
     def show_settings_menu(self):
+        # Create the overlay if it doesn't exist
+        if not hasattr(self, 'overlay') or self.overlay is None:
+            self.overlay = ModalOverlay(self.central_widget)
+        self.overlay.show()
+        self.overlay.raise_()
+        
+        # Reparent the settings menu to the overlay so it appears on top
+        self.settings_menu.setParent(self.overlay)
         menu_width = int(self.height() * 0.4)
         menu_height = int(self.width() * 0.3)
         self.settings_menu.setFixedSize(menu_width, menu_height)
-        x = (self.width() - menu_width) // 2
-        y = (self.height() - menu_height) // 2
+        x = (self.overlay.width() - menu_width) // 2
+        y = (self.overlay.height() - menu_height) // 2
         self.settings_menu.move(x, y)
-        self.settings_menu.show()
+        self.settings_menu.fade_in()
+        self.settings_menu.raise_()
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.MouseButtonPress:
-            if self.settings_menu.isVisible():
-                geo = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
-                            self.settings_menu.size())
-                if not geo.contains(event.globalPos()):
-                    self.settings_menu.hide()
+        if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
+            geo = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
+                        self.settings_menu.size())
+            if not geo.contains(event.globalPos()):
+                self.settings_menu.hide_with_fade()
+                return True  # block event propagation
         return super().eventFilter(obj, event)
+
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -563,17 +668,33 @@ class MainWindow(QMainWindow):
         self.mode_label.setText("Dark Mode" if dark_mode else "Light Mode")
         self.animating = True
         self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, 500, dark_mode)
+        self.title_bar.update_mode(dark_mode)
 
     def animate_color_change(self, start_bg, end_bg, start_text, end_text, duration, dark_mode):
         steps = 20
         interval = duration // steps
         self.step = 0
+
+        start_bottom = self.dark_bottom if self.current_bg == self.dark_bg else self.light_bottom
+        target_bottom = self.dark_bottom if dark_mode else self.light_bottom
+        start_bottom_text = (255, 255, 255) if self.current_bg == self.dark_bg else (0, 0, 0)
+        target_bottom_text = (255, 255, 255) if dark_mode else (0, 0, 0)
+    
         def update():
             factor = self.step / steps
             new_bg = interpolate_color(start_bg, end_bg, factor)
             new_text = interpolate_color(start_text, end_text, factor)
+            new_bottom = interpolate_color(start_bottom, target_bottom, factor)
+            new_bottom_text = interpolate_color(start_bottom_text, target_bottom_text, factor)
+        
             self.update_stylesheet(new_bg, new_text)
             self.update_text_field_styles_dynamic(new_bg)
+    
+            self.bottom_bar_widget.setStyleSheet(f"background-color: #{new_bottom[0]:02x}{new_bottom[1]:02x}{new_bottom[2]:02x};")
+            bottom_text_hex = f"#{new_bottom_text[0]:02x}{new_bottom_text[1]:02x}{new_bottom_text[2]:02x}"
+            self.settings_icon.setStyleSheet(f"color: {bottom_text_hex};")
+            self.mode_label.setStyleSheet(f"color: {bottom_text_hex};")
+        
             self.step += 1
             if self.step > steps:
                 self.timer.stop()
