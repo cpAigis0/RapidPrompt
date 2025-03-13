@@ -1,9 +1,9 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
-from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices
 
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
@@ -115,6 +115,20 @@ class CustomTitleBar(QWidget):
         self.toggle_max_restore()
         super().mouseDoubleClickEvent(event)
 
+class LogLineEdit(QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setReadOnly(True)
+        self.setCursor(Qt.PointingHandCursor)
+    
+    def mousePressEvent(self, event):
+        import os
+        if os.path.exists("output.log"):
+            QDesktopServices.openUrl(QUrl.fromLocalFile("output.log"))
+        else:
+            self.setText("Log File not found.")
+        super().mousePressEvent(event)
+
 class CustomSplitterHandle(QSplitterHandle):
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
@@ -172,8 +186,15 @@ class Part1Container(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(1)
+        
+        """self.input_label = QLabel("Input")
+        self.input_label.setAlignment(Qt.AlignCenter)
+        self.input_label.setFixedHeight(25)
+        self.input_label.setStyleSheet("QLineEdit { color: #555; font-size: 10px; border: none; font-weight: bold; }")
+        layout.addWidget(self.input_label)"""
+        
         self.text_edit = QTextEdit()
-        self.text_edit.setMinimumWidth(200)
         layout.addWidget(self.text_edit)
 
 class Part2Container(QWidget):
@@ -305,7 +326,7 @@ class SettingsMenu(QFrame):
         
         layout.addSpacing(15)
         output_layout = QHBoxLayout()
-        self.output_label = QLabel("Output Fields:")
+        self.output_label = QLabel("Number Outputs:")
         output_layout.addWidget(self.output_label)
         self.output_spin_box = QSpinBox()
         self.output_spin_box.setMinimum(1)
@@ -476,6 +497,12 @@ class MainWindow(QMainWindow):
 
         bottom_layout.addStretch()
 
+        self.log_field = LogLineEdit()
+        self.log_field.setFixedSize(500, 18) 
+        self.log_field.setStyleSheet("background-color: #3D3D3D; color: #989898; border: none;")
+        self.log_field.setText("Log File is empty.")
+        bottom_layout.addWidget(self.log_field)
+
         main_layout.addWidget(content_widget)
         main_layout.addWidget(self.bottom_bar_widget)
 
@@ -511,6 +538,11 @@ class MainWindow(QMainWindow):
     def update_part3_fields(self, count):
         self.part3_container.update_field_count(count)
         self.update_text_field_styles_dynamic()
+
+    def update_log_field(self):
+        with open("output.log", "r") as f:
+            content = f.read().strip()
+            self.log_field.setText(content if content else "Log File is empty")
 
     def show_settings_menu(self):
         if not hasattr(self, 'overlay') or self.overlay is None:
