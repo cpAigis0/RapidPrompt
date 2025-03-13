@@ -1,19 +1,10 @@
 import sys
-import sip
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint, QParallelAnimationGroup
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize, QPoint
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
 from PyQt5.QtGui import QPainter, QColor, QPen, QLinearGradient, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion
 
-def interpolate_color(start_color, end_color, factor):
-    return (
-        int(max(0, min(255, start_color[0] + (end_color[0] - start_color[0]) * factor))),
-        int(max(0, min(255, start_color[1] + (end_color[1] - start_color[1]) * factor))),
-        int(max(0, min(255, start_color[2] + (end_color[2] - start_color[2]) * factor)))
-    )
-
-# --- Custom Title Bar and its Button ---
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
         super().__init__(parent)
@@ -64,7 +55,6 @@ class CustomTitleBar(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Left container: icon and window title (no background)
         self.left_container = QWidget(self)
         left_layout = QHBoxLayout(self.left_container)
         left_layout.setContentsMargins(9, 0, 5, 0)
@@ -77,10 +67,10 @@ class CustomTitleBar(QWidget):
             self.iconLabel.setPixmap(scaled_pix)
         left_layout.addWidget(self.iconLabel)
         self.windowTitleLabel = QLabel(self.window_title, self)
-        self.windowTitleLabel.setStyleSheet("font: bold 10px; padding: 2px;")
+        # Directly apply dark mode styling
+        self.windowTitleLabel.setStyleSheet("font: bold 10px; color: #E0E0E0; padding: 2px;")
         left_layout.addWidget(self.windowTitleLabel)
 
-        # Right container: control buttons
         self.right_container = QWidget(self)
         right_layout = QHBoxLayout(self.right_container)
         right_layout.setContentsMargins(0, 0, 9, 0)
@@ -95,35 +85,24 @@ class CustomTitleBar(QWidget):
         right_layout.addWidget(self.btn_max)
         right_layout.addWidget(self.btn_close)
 
-        # File title label (to be centered in the entire title bar)
         self.fileTitleLabel = QLabel(self.file_title, self)
-        self.fileTitleLabel.setStyleSheet("font: 10px; padding: 2px;")
+        self.fileTitleLabel.setStyleSheet("font: 10px; color: #E0E0E0; padding: 2px;")
         self.fileTitleLabel.setAlignment(Qt.AlignCenter)
 
-        # Assemble layout with stretches to balance the file title in the center.
         main_layout.addWidget(self.left_container)
         main_layout.addStretch()
         main_layout.addWidget(self.fileTitleLabel)
         main_layout.addStretch()
         main_layout.addWidget(self.right_container)
-
-    def update_mode(self, dark_mode):
-        # Remove any background updates – only adjust text contrast.
-        text_color = "#E0E0E0" if dark_mode else "#000000"
-        self.windowTitleLabel.setStyleSheet(f"font: bold 10px; color: {text_color}; padding: 2px;")
-        self.fileTitleLabel.setStyleSheet(f"font: 10px; color: {text_color}; padding: 2px;")
-        self.iconLabel.setStyleSheet(f"color: {text_color};")
-
+    
     def toggle_max_restore(self):
         if self.window().isMaximized():
             self.window().showNormal()
         else:
             self.window().showMaximized()
 
-    # --- Improved Dragging Code for Smoother Movement ---
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            # Record the fixed offset from the window's top-left corner.
             self._dragPos = event.globalPos() - self.window().frameGeometry().topLeft()
         super().mousePressEvent(event)
 
@@ -135,66 +114,6 @@ class CustomTitleBar(QWidget):
     def mouseDoubleClickEvent(self, event):
         self.toggle_max_restore()
         super().mouseDoubleClickEvent(event)
-
-# --- Other Custom Widgets ---
-
-class CustomOutlineFrame(QFrame):
-    def __init__(self, position="middle", parent=None):
-        super().__init__(parent)
-        self.position = position
-        self.setContentsMargins(5, 5, 5, 5)
-        self.setFrameStyle(QFrame.NoFrame)
-
-class ToggleSwitch(QWidget):
-    toggled = pyqtSignal(bool)
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(30, 20)
-        self._checked = True
-        self._circle_pos = 3 if not self._checked else (self.width() - self.height() + 3)
-        self.animation = QPropertyAnimation(self, b"circle_pos")
-        self.animation.setDuration(250)
-        self.animation.setEasingCurve(QEasingCurve.InOutCubic)
-        self._locked = False
-
-    def lock(self, value):
-        self._locked = value
-
-    def mousePressEvent(self, event):
-        if self._locked:
-            return
-        self._checked = not self._checked
-        self.toggled.emit(self._checked)
-        start_value = self._circle_pos
-        end_value = (self.width() - self.height() + 3) if self._checked else 3
-        self.animation.setStartValue(start_value)
-        self.animation.setEndValue(end_value)
-        self.animation.start()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        gradient = QLinearGradient(0, 0, self.width(), 0)
-        if not self._checked:
-            gradient.setColorAt(0, QColor(220, 220, 220))
-            gradient.setColorAt(1, QColor(180, 180, 180))
-        else:
-            gradient.setColorAt(0, QColor(170, 170, 170))
-            gradient.setColorAt(1, QColor(130, 130, 130))
-        p.setPen(Qt.NoPen)
-        p.setBrush(gradient)
-        p.drawRoundedRect(self.rect(), self.height()/2, self.height()/2)
-        circle_diameter = self.height() - 6
-        circle_rect = QRect(self._circle_pos, 3, circle_diameter, circle_diameter)
-        circle_color = QColor(255, 255, 255) if not self._checked else QColor(80, 80, 80)
-        p.setPen(QPen(QColor(50, 50, 50), 3))
-        p.setBrush(circle_color)
-        p.drawEllipse(circle_rect)
-        p.end()
-
-    circle_pos = pyqtProperty(int, 
-        lambda self: self._circle_pos,
-        lambda self, pos: setattr(self, '_circle_pos', pos) or self.update())
 
 class CustomSplitterHandle(QSplitterHandle):
     def __init__(self, orientation, parent):
@@ -263,7 +182,6 @@ class Part2Container(QWidget):
         layout = QVBoxLayout(self)
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignCenter)
-        # Make the label text selectable (for marking) but not editable.
         self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.label)
 
@@ -274,7 +192,7 @@ class Part3Container(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(10)
         self.fields = []
-        for _ in range(4):  # Always start with 4 fields
+        for _ in range(4):
             self.add_field()
 
     def add_field(self):
@@ -315,6 +233,8 @@ class ModalOverlay(QWidget):
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Apply dark mode styling directly in the constructor.
+        self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
@@ -322,17 +242,18 @@ class SettingsMenu(QFrame):
         layout.addStretch() 
         
         self.standard_layout_button = QPushButton("Set Standard Layout")
-        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #e0e0e0; color: #333;")
+        # Updated for dark mode.
+        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
         self.standard_layout_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.standard_layout_button)
 
         self.export_button = QPushButton("Export Layout")
-        self.export_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #ddd; color: #333;")
+        self.export_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
         self.export_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.export_button)
         
         self.import_button = QPushButton("Import Layout")
-        self.import_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #ddd; color: #333;")
+        self.import_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
         self.import_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.import_button)
         
@@ -347,21 +268,21 @@ class SettingsMenu(QFrame):
             QSpinBox {
                 padding: 4px;
                 font-size: 13px;
-                border: 1px solid #aaa;
+                border: 1px solid #555;
                 border-radius: 4px;
-                background: #fff;
-                color: #333;
+                background: #444;
+                color: #ddd;
             }
             QSpinBox::up-button {
-                background: #ddd;
+                background: #666;
                 border: none;
-                border-bottom: 1px solid #bbb;
+                border-bottom: 1px solid #555;
                 width: 16px;
             }
             QSpinBox::down-button {
-                background: #ddd;
+                background: #666;
                 border: none;
-                border-top: 1px solid #bbb;
+                border-top: 1px solid #555;
                 width: 16px;
             }
             QSpinBox::up-arrow, QSpinBox::down-arrow {
@@ -374,12 +295,12 @@ class SettingsMenu(QFrame):
         
         layout.addSpacing(15)
         self.reset_button = QPushButton("Reset Layout")
-        self.reset_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #aaa; color: black;")
+        self.reset_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #555; color: #ddd;")
         self.reset_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.reset_button)
         
         self.close_button = QPushButton("Close")
-        self.close_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #aaa; color: black;")
+        self.close_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #555; color: #ddd;")
         self.close_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.close_button)
         
@@ -398,7 +319,6 @@ class SettingsMenu(QFrame):
         self.anim.setDuration(200)
         self.anim.setStartValue(0)
         self.anim.setEndValue(1)
-        self.anim.setEasingCurve(QEasingCurve.InOutCubic)
         self.anim.start()
 
     def hide_with_fade(self):
@@ -406,75 +326,8 @@ class SettingsMenu(QFrame):
         self.anim.setDuration(200)
         self.anim.setStartValue(self.effect.opacity())
         self.anim.setEndValue(0)
-        self.anim.setEasingCurve(QEasingCurve.InOutCubic)
         self.anim.finished.connect(self.hide)
         self.anim.start()
-    
-    def update_mode(self, dark_mode):
-        if dark_mode:
-            self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
-            self.export_button.setStyleSheet("padding: 8px; background-color: #444; color: #ddd;")
-            self.import_button.setStyleSheet("padding: 8px; background-color: #444; color: #ddd;")
-            self.reset_button.setStyleSheet("padding: 8px; background-color: #555; color: #ddd;")
-            self.close_button.setStyleSheet("padding: 8px; background-color: #555; color: #ddd;")
-            self.output_spin_box.setStyleSheet("""
-                QSpinBox {
-                    padding: 4px;
-                    font-size: 13px;
-                    border: 1px solid #555;
-                    border-radius: 4px;
-                    background: #444;
-                    color: #ddd;
-                }
-                QSpinBox::up-button {
-                    background: #666;
-                    border: none;
-                    border-bottom: 1px solid #555;
-                    width: 16px;
-                }
-                QSpinBox::down-button {
-                    background: #666;
-                    border: none;
-                    border-top: 1px solid #555;
-                    width: 16px;
-                }
-                QSpinBox::up-arrow, QSpinBox::down-arrow {
-                    width: 10px;
-                    height: 10px;
-                }
-            """)
-        else:
-            self.setStyleSheet("QFrame { background-color: #f0f0f0; border: 2px solid #888; border-radius: 8px; color: #333; }")
-            self.export_button.setStyleSheet("padding: 8px; background-color: #ddd; color: #333;")
-            self.import_button.setStyleSheet("padding: 8px; background-color: #ddd; color: #333;")
-            self.reset_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
-            self.close_button.setStyleSheet("padding: 8px; background-color: #aaa; color: black;")
-            self.output_spin_box.setStyleSheet("""
-                QSpinBox {
-                    padding: 4px;
-                    font-size: 13px;
-                    border: 1px solid #aaa;
-                    border-radius: 4px;
-                    background: #fff;
-                    color: #333;
-                }
-                QSpinBox::up-button {
-                    background: #ddd;
-                    border: none;
-                    border-bottom: 1px solid #bbb;
-                    width: 16px;
-                }
-                QSpinBox::down-button {
-                    background: #ddd;
-                    border: none;
-                    border-top: 1px solid #bbb;
-                    width: 16px;
-                }
-                QSpinBox::up-arrow, QSpinBox::down-arrow {
-                    width: 10px;
-                    height: 10px;
-                }
-            """)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -484,19 +337,15 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        # -- Light/Dark Colors --
-        self.light_bg = (255, 255, 255)
+        # Always in dark mode.
         self.dark_bg = (45, 45, 45)
-        self.light_text = (0, 0, 0)
         self.dark_text = (220, 220, 220)
-        self.current_bg = self.dark_bg
-        self.current_text = self.dark_text
-        self.textfield_bg_light = (255, 255, 255)
         self.textfield_bg_dark = (58, 58, 58)
-        self.textfield_border_light = (204, 204, 204)
         self.textfield_border_dark = (85, 85, 85)
         self.dark_bottom = (51, 51, 51)
-        self.light_bottom = (224, 224, 224)
+
+        self.current_bg = self.dark_bg
+        self.current_text = self.dark_text
 
         self.animating = False
         self.timer = None
@@ -507,12 +356,11 @@ class MainWindow(QMainWindow):
 
         self.style_timer = QTimer(self)
         self.style_timer.setSingleShot(True)
-        self.style_timer.timeout.connect(lambda: self.update_text_field_styles_dynamic(self.current_bg))
+        self.style_timer.timeout.connect(self.update_text_field_styles_dynamic)
         self.style_timer.start(0)
 
         self.settings_menu = SettingsMenu(self.central_widget)
         self.settings_menu.hide()
-        self.settings_menu.update_mode(self.current_bg == self.dark_bg)
         self.settings_menu.output_spin_box.valueChanged.connect(self.update_part3_fields)
 
     def init_ui(self):
@@ -521,12 +369,9 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # --- Title Bar ---
         self.title_bar = CustomTitleBar(self, "RapidPrompt")
-        self.title_bar.update_mode(self.current_bg == self.dark_bg)
         main_layout.addWidget(self.title_bar)
 
-        # --- Content Area ---
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(10, 10, 10, 10)
@@ -569,16 +414,14 @@ class MainWindow(QMainWindow):
         separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content_layout.addWidget(separator, alignment=Qt.AlignHCenter)
 
-        # --- Bottom Bar ---
+        # Bottom bar now only holds the settings icon.
         self.bottom_bar_widget = QWidget(self)
-        self.bottom_bar_widget.setMaximumHeight(50)  # increased height for square buttons
-        # Use your existing dark bottom color for the background.
+        self.bottom_bar_widget.setMaximumHeight(50)
         self.bottom_bar_widget.setStyleSheet("background-color: rgb(%d, %d, %d);" % self.dark_bottom)
         bottom_layout = QHBoxLayout(self.bottom_bar_widget)
         bottom_layout.setSpacing(5)
         bottom_layout.setContentsMargins(5, 0, 5, 0)
 
-        # Settings icon remains on the left.
         self.settings_icon = ClickableLabel("⚙")
         self.settings_icon.setFixedSize(20, 20)
         self.settings_icon.setStyleSheet("color: #ffffff;")
@@ -587,43 +430,10 @@ class MainWindow(QMainWindow):
 
         bottom_layout.addStretch()
 
-        # --- Simplified Color Scheme Buttons ---
-        self.scheme_container = QFrame()
-        self.scheme_container.setStyleSheet("background-color: transparent; border: none;")
-        scheme_layout = QHBoxLayout(self.scheme_container)
-        scheme_layout.setContentsMargins(0, 0, 0, 0)
-        scheme_layout.setSpacing(5)
+        main_layout.addWidget(content_widget)
+        main_layout.addWidget(self.bottom_bar_widget)
 
-        # Light mode button
-        self.light_button = QPushButton("L")
-        self.light_button.setFixedSize(40, 40)
-        self.light_button.setStyleSheet("font-size: 12px; border: 1px solid #aaa;")
-        self.light_button.clicked.connect(lambda: self.switch_color_scheme("light"))
-        scheme_layout.addWidget(self.light_button)
-
-        # Dark mode button
-        self.dark_button = QPushButton("D")
-        self.dark_button.setFixedSize(40, 40)
-        self.dark_button.setStyleSheet("font-size: 12px; border: 1px solid #aaa;")
-        self.dark_button.clicked.connect(lambda: self.switch_color_scheme("dark"))
-        scheme_layout.addWidget(self.dark_button)
-
-        bottom_layout.addWidget(self.scheme_container)
-
-    def switch_color_scheme(self, scheme):
-        dark_mode = (scheme == "dark")
-        target_bg = self.dark_bg if dark_mode else self.light_bg
-        target_text = self.dark_text if dark_mode else self.light_text
-        target_bottom = self.dark_bottom if dark_mode else self.light_bottom
-
-        if self.animating:
-            return
-        self.animating = True
-
-        duration = 500
-        self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, duration, dark_mode)
-        self.title_bar.update_mode(dark_mode)
-
+        self.setCentralWidget(self.central_widget)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -642,7 +452,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def reset_layout(self):
-        if not hasattr(self, 'vertical_splitter') or sip.isdeleted(self.vertical_splitter):
+        if not hasattr(self, 'vertical_splitter'):
             return
         total_v = sum(self.vertical_splitter.sizes())
         self.vertical_splitter.setSizes([total_v // 2, total_v - total_v // 2])
@@ -652,13 +462,11 @@ class MainWindow(QMainWindow):
             total_h = 1000
         self.top_splitter.setSizes([total_h // 3, total_h - total_h // 3])
 
-
     def update_part3_fields(self, count):
         self.part3_container.update_field_count(count)
-        self.update_text_field_styles_dynamic(self.current_bg)
+        self.update_text_field_styles_dynamic()
 
     def show_settings_menu(self):
-        # Create the overlay if it doesn't exist
         if not hasattr(self, 'overlay') or self.overlay is None:
             self.overlay = ModalOverlay(self.central_widget)
         self.overlay.show()
@@ -686,9 +494,8 @@ class MainWindow(QMainWindow):
                         self.settings_menu.size())
             if not geo.contains(event.globalPos()):
                 self.settings_menu.hide_with_fade()
-                return True  # block event propagation
+                return True
         return super().eventFilter(obj, event)
-
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -699,7 +506,6 @@ class MainWindow(QMainWindow):
             x = (self.width() - menu_width) // 2
             y = (self.height() - menu_height) // 2
             self.settings_menu.move(x, y)
-        # Set rounded window mask
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 8, 8)
         region = QRegion(path.toFillPolygon().toPolygon())
@@ -715,64 +521,11 @@ class MainWindow(QMainWindow):
         p.drawRoundedRect(rect, 8, 8)
         p.end()
 
-    def handle_mode_change(self, dark_mode):
-        if self.animating:
-            return
-        self.mode_toggle.lock(True)
-        target_bg = self.dark_bg if dark_mode else self.light_bg
-        target_text = self.dark_text if dark_mode else self.light_text
-        self.mode_label.setText("Dark Mode" if dark_mode else "Light Mode")
-        self.animating = True
-        self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, 500, dark_mode)
-        self.title_bar.update_mode(dark_mode)
-
-    def animate_color_change(self, start_bg, end_bg, start_text, end_text, duration, dark_mode):
-        steps = 20
-        interval = duration // steps
-        self.step = 0
-        self.timer = QTimer(self)
-
-        start_bottom = self.dark_bottom if self.current_bg == self.dark_bg else self.light_bottom
-        end_bottom = self.dark_bottom if dark_mode else self.light_bottom
-    
-        def update():
-            factor = self.step / steps
-            new_bg = interpolate_color(start_bg, end_bg, factor)
-            new_text = interpolate_color(start_text, end_text, factor)
-            new_bottom = interpolate_color(start_bottom, end_bottom, factor)
-
-            self.update_stylesheet(new_bg, new_text)
-            self.update_text_field_styles_dynamic(new_bg)
-
-            self.bottom_bar_widget.setStyleSheet(f"background-color: rgb({new_bottom[0]}, {new_bottom[1]}, {new_bottom[2]});")
-            adjusted_color = (min(new_text[0] + 50, 255),min(new_text[1] + 50, 255),min(new_text[2] + 50, 255))
-            self.settings_icon.setStyleSheet(f"color: #{adjusted_color[0]:02x}{adjusted_color[1]:02x}{adjusted_color[2]:02x};")
-
-            self.step += 1
-            if self.step > steps:
-                self.timer.stop()
-                self.current_bg = end_bg
-                self.current_text = end_text
-                self.current_bottom_color = end_bottom
-                self.animating = False
-                self.settings_menu.update_mode(dark_mode)
-    
-        self.timer.timeout.connect(update)
-        self.timer.start(interval)
-    
-    def update(self):
-        pass  # Placeholder if needed for timer callback in animate_color_change
-
-    def update_text_field_styles_dynamic(self, bg_color):
-        if not hasattr(self, 'part1_container') or self.part1_container is None:
-            return
-        if (not hasattr(self.part1_container, 'text_edit') or self.part1_container.text_edit is None or sip.isdeleted(self.part1_container.text_edit)):
-            return
-
-        factor = (255 - bg_color[0]) / (255 - 45)
-        new_bg = interpolate_color(self.textfield_bg_light, self.textfield_bg_dark, factor)
-        new_border = interpolate_color(self.textfield_border_light, self.textfield_border_dark, factor)
-        new_text_color = interpolate_color((0, 0, 0), (255, 255, 255), factor)
+    def update_text_field_styles_dynamic(self):
+        # Directly use dark mode colors.
+        new_bg = self.textfield_bg_dark
+        new_border = self.textfield_border_dark
+        new_text_color = (255, 255, 255)
         bg_hex = '#%02x%02x%02x' % new_bg
         border_hex = '#%02x%02x%02x' % new_border
         text_hex = '#%02x%02x%02x' % new_text_color
