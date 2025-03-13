@@ -1,4 +1,5 @@
 import sys
+import sip
 from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QSize, QPoint, QParallelAnimationGroup
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
@@ -13,7 +14,6 @@ def interpolate_color(start_color, end_color, factor):
     )
 
 # --- Custom Title Bar and its Button ---
-
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
         super().__init__(parent)
@@ -267,7 +267,6 @@ class Part2Container(QWidget):
         self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.label)
 
-
 class Part3Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -323,17 +322,17 @@ class SettingsMenu(QFrame):
         layout.addStretch() 
         
         self.standard_layout_button = QPushButton("Set Standard Layout")
-        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
+        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #e0e0e0; color: #333;")
         self.standard_layout_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.standard_layout_button)
 
         self.export_button = QPushButton("Export Layout")
-        self.export_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
+        self.export_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #ddd; color: #333;")
         self.export_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.export_button)
         
         self.import_button = QPushButton("Import Layout")
-        self.import_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #ddd; color: #333;")
+        self.import_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #ddd; color: #333;")
         self.import_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.import_button)
         
@@ -375,12 +374,12 @@ class SettingsMenu(QFrame):
         
         layout.addSpacing(15)
         self.reset_button = QPushButton("Reset Layout")
-        self.reset_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #aaa; color: black;")
+        self.reset_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #aaa; color: black;")
         self.reset_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.reset_button)
         
         self.close_button = QPushButton("Close")
-        self.close_button.setStyleSheet("padding: 8px; border-radius: 6px; background-color: #aaa; color: black;")
+        self.close_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #aaa; color: black;")
         self.close_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.close_button)
         
@@ -394,49 +393,22 @@ class SettingsMenu(QFrame):
         self.effect.setOpacity(0)
 
     def fade_in(self):
-        target_pos = self.pos()
-        start_pos = target_pos + QPoint(0, self.height())
-        self.move(start_pos)
         self.show()
-        
-        self.anim_group = QParallelAnimationGroup(self)
-        
-        opacity_anim = QPropertyAnimation(self.effect, b"opacity")
-        opacity_anim.setDuration(200)
-        opacity_anim.setStartValue(0)
-        opacity_anim.setEndValue(1)
-        opacity_anim.setEasingCurve(QEasingCurve.InOutCubic)
-        
-        pos_anim = QPropertyAnimation(self, b"pos")
-        pos_anim.setDuration(200)
-        pos_anim.setStartValue(start_pos)
-        pos_anim.setEndValue(target_pos)
-        pos_anim.setEasingCurve(QEasingCurve.InOutCubic)
-        
-        self.anim_group.addAnimation(opacity_anim)
-        self.anim_group.addAnimation(pos_anim)
-        self.anim_group.start()
+        self.anim = QPropertyAnimation(self.effect, b"opacity")
+        self.anim.setDuration(200)
+        self.anim.setStartValue(0)
+        self.anim.setEndValue(1)
+        self.anim.setEasingCurve(QEasingCurve.InOutCubic)
+        self.anim.start()
 
     def hide_with_fade(self):
-        target_pos = self.pos() + QPoint(0, self.height())
-        self.anim_group = QParallelAnimationGroup(self)
-        
-        opacity_anim = QPropertyAnimation(self.effect, b"opacity")
-        opacity_anim.setDuration(200)
-        opacity_anim.setStartValue(self.effect.opacity())
-        opacity_anim.setEndValue(0)
-        opacity_anim.setEasingCurve(QEasingCurve.InOutCubic)
-        
-        pos_anim = QPropertyAnimation(self, b"pos")
-        pos_anim.setDuration(200)
-        pos_anim.setStartValue(self.pos())
-        pos_anim.setEndValue(target_pos)
-        pos_anim.setEasingCurve(QEasingCurve.InOutCubic)
-        
-        self.anim_group.addAnimation(opacity_anim)
-        self.anim_group.addAnimation(pos_anim)
-        self.anim_group.finished.connect(self.hide)
-        self.anim_group.start()
+        self.anim = QPropertyAnimation(self.effect, b"opacity")
+        self.anim.setDuration(200)
+        self.anim.setStartValue(self.effect.opacity())
+        self.anim.setEndValue(0)
+        self.anim.setEasingCurve(QEasingCurve.InOutCubic)
+        self.anim.finished.connect(self.hide)
+        self.anim.start()
     
     def update_mode(self, dark_mode):
         if dark_mode:
@@ -532,7 +504,12 @@ class MainWindow(QMainWindow):
         self.installEventFilter(self)
         self.init_ui()
         self.update_stylesheet(self.current_bg, self.current_text)
-        self.update_text_field_styles_dynamic(self.current_bg)
+
+        self.style_timer = QTimer(self)
+        self.style_timer.setSingleShot(True)
+        self.style_timer.timeout.connect(lambda: self.update_text_field_styles_dynamic(self.current_bg))
+        self.style_timer.start(0)
+
         self.settings_menu = SettingsMenu(self.central_widget)
         self.settings_menu.hide()
         self.settings_menu.update_mode(self.current_bg == self.dark_bg)
@@ -543,98 +520,138 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(self.central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-    
+
         # --- Title Bar ---
         self.title_bar = CustomTitleBar(self, "RapidPrompt")
         self.title_bar.update_mode(self.current_bg == self.dark_bg)
         main_layout.addWidget(self.title_bar)
-    
+
         # --- Content Area ---
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(10, 10, 10, 10)
-    
+
         self.vertical_splitter = CustomSplitter(Qt.Vertical)
         self.vertical_splitter.setHandleWidth(15)
         self.top_splitter = CustomSplitter(Qt.Horizontal)
         self.top_splitter.setHandleWidth(15)
-    
+
         self.part1_container = Part1Container()
         scroll1 = QScrollArea()
         scroll1.setFrameStyle(QFrame.NoFrame)
         scroll1.setWidget(self.part1_container)
         scroll1.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll1)
-    
+
         self.part2_container = Part2Container()
         scroll2 = QScrollArea()
         scroll2.setFrameStyle(QFrame.NoFrame)
         scroll2.setWidget(self.part2_container)
         scroll2.setWidgetResizable(True)
         self.top_splitter.addWidget(scroll2)
-    
+
         self.part1_container.text_edit.textChanged.connect(
-            lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText()))
+            lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText())
+        )
         self.vertical_splitter.addWidget(self.top_splitter)
-    
+
         self.part3_container = Part3Container()
         scroll3 = QScrollArea()
         scroll3.setFrameStyle(QFrame.NoFrame)
         scroll3.setWidget(self.part3_container)
         scroll3.setWidgetResizable(True)
         self.vertical_splitter.addWidget(scroll3)
-    
+
         content_layout.addWidget(self.vertical_splitter)
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
         separator.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content_layout.addWidget(separator, alignment=Qt.AlignHCenter)
-    
+
         # --- Bottom Bar ---
         self.bottom_bar_widget = QWidget(self)
-        self.bottom_bar_widget.setMaximumHeight(30)
-        self.bottom_bar_widget.setStyleSheet("background-color: #333333;")
+        self.bottom_bar_widget.setMaximumHeight(50)  # increased height for square buttons
+        # Use your existing dark bottom color for the background.
+        self.bottom_bar_widget.setStyleSheet("background-color: rgb(%d, %d, %d);" % self.dark_bottom)
         bottom_layout = QHBoxLayout(self.bottom_bar_widget)
         bottom_layout.setSpacing(5)
         bottom_layout.setContentsMargins(5, 0, 5, 0)
-    
-        # Settings icon on the left with contrasting text color
+
+        # Settings icon remains on the left.
         self.settings_icon = ClickableLabel("⚙")
         self.settings_icon.setFixedSize(20, 20)
         self.settings_icon.setStyleSheet("color: #ffffff;")
         self.settings_icon.clicked.connect(self.show_settings_menu)
         bottom_layout.addWidget(self.settings_icon)
-    
-        bottom_layout.addStretch()  # Spacer to push dark/light controls to the right
-    
-        self.mode_label = QLabel("Dark Mode" if self.current_bg == self.dark_bg else "Light Mode")
-        self.mode_label.setAlignment(Qt.AlignVCenter)
-        self.mode_label.setStyleSheet("color: #ffffff;")
-        bottom_layout.addWidget(self.mode_label)
-    
-        self.mode_toggle = ToggleSwitch()
-        self.mode_toggle.toggled.connect(self.handle_mode_change)
-        bottom_layout.addWidget(self.mode_toggle)
-    
-        content_layout.addWidget(self.bottom_bar_widget)
-        main_layout.addWidget(content_widget)
-        self.setCentralWidget(self.central_widget)
-        self.central_widget.installEventFilter(self)
+
+        bottom_layout.addStretch()
+
+        # --- Simplified Color Scheme Buttons ---
+        self.scheme_container = QFrame()
+        self.scheme_container.setStyleSheet("background-color: transparent; border: none;")
+        scheme_layout = QHBoxLayout(self.scheme_container)
+        scheme_layout.setContentsMargins(0, 0, 0, 0)
+        scheme_layout.setSpacing(5)
+
+        # Light mode button
+        self.light_button = QPushButton("L")
+        self.light_button.setFixedSize(40, 40)
+        self.light_button.setStyleSheet("font-size: 12px; border: 1px solid #aaa;")
+        self.light_button.clicked.connect(lambda: self.switch_color_scheme("light"))
+        scheme_layout.addWidget(self.light_button)
+
+        # Dark mode button
+        self.dark_button = QPushButton("D")
+        self.dark_button.setFixedSize(40, 40)
+        self.dark_button.setStyleSheet("font-size: 12px; border: 1px solid #aaa;")
+        self.dark_button.clicked.connect(lambda: self.switch_color_scheme("dark"))
+        scheme_layout.addWidget(self.dark_button)
+
+        bottom_layout.addWidget(self.scheme_container)
+
+    def switch_color_scheme(self, scheme):
+        dark_mode = (scheme == "dark")
+        target_bg = self.dark_bg if dark_mode else self.light_bg
+        target_text = self.dark_text if dark_mode else self.light_text
+        target_bottom = self.dark_bottom if dark_mode else self.light_bottom
+
+        if self.animating:
+            return
+        self.animating = True
+
+        duration = 500
+        self.animate_color_change(self.current_bg, target_bg, self.current_text, target_text, duration, dark_mode)
+        self.title_bar.update_mode(dark_mode)
+
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self.initial_reset_done:
-            QTimer.singleShot(0, self.reset_layout)
+            self.layout_reset_timer = QTimer(self)
+            self.layout_reset_timer.setSingleShot(True)
+            self.layout_reset_timer.timeout.connect(self.reset_layout)
+            self.layout_reset_timer.start(0)
             self.initial_reset_done = True
 
+    def closeEvent(self, event):
+        if hasattr(self, 'style_timer') and self.style_timer.isActive():
+            self.style_timer.stop()
+        if hasattr(self, 'layout_reset_timer') and self.layout_reset_timer.isActive():
+            self.layout_reset_timer.stop()
+        event.accept()
+
     def reset_layout(self):
+        if not hasattr(self, 'vertical_splitter') or sip.isdeleted(self.vertical_splitter):
+            return
         total_v = sum(self.vertical_splitter.sizes())
         self.vertical_splitter.setSizes([total_v // 2, total_v - total_v // 2])
+    
         total_h = sum(self.top_splitter.sizes())
         if total_h == 0:
             total_h = 1000
         self.top_splitter.setSizes([total_h // 3, total_h - total_h // 3])
+
 
     def update_part3_fields(self, count):
         self.part3_container.update_field_count(count)
@@ -713,40 +730,45 @@ class MainWindow(QMainWindow):
         steps = 20
         interval = duration // steps
         self.step = 0
+        self.timer = QTimer(self)
 
         start_bottom = self.dark_bottom if self.current_bg == self.dark_bg else self.light_bottom
-        target_bottom = self.dark_bottom if dark_mode else self.light_bottom
-        start_bottom_text = (255, 255, 255) if self.current_bg == self.dark_bg else (0, 0, 0)
-        target_bottom_text = (255, 255, 255) if dark_mode else (0, 0, 0)
+        end_bottom = self.dark_bottom if dark_mode else self.light_bottom
     
         def update():
             factor = self.step / steps
             new_bg = interpolate_color(start_bg, end_bg, factor)
             new_text = interpolate_color(start_text, end_text, factor)
-            new_bottom = interpolate_color(start_bottom, target_bottom, factor)
-            new_bottom_text = interpolate_color(start_bottom_text, target_bottom_text, factor)
-        
+            new_bottom = interpolate_color(start_bottom, end_bottom, factor)
+
             self.update_stylesheet(new_bg, new_text)
             self.update_text_field_styles_dynamic(new_bg)
-    
-            self.bottom_bar_widget.setStyleSheet(f"background-color: #{new_bottom[0]:02x}{new_bottom[1]:02x}{new_bottom[2]:02x};")
-            bottom_text_hex = f"#{new_bottom_text[0]:02x}{new_bottom_text[1]:02x}{new_bottom_text[2]:02x}"
-            self.settings_icon.setStyleSheet(f"color: {bottom_text_hex};")
-            self.mode_label.setStyleSheet(f"color: {bottom_text_hex};")
-        
+
+            self.bottom_bar_widget.setStyleSheet(f"background-color: rgb({new_bottom[0]}, {new_bottom[1]}, {new_bottom[2]});")
+            adjusted_color = (min(new_text[0] + 50, 255),min(new_text[1] + 50, 255),min(new_text[2] + 50, 255))
+            self.settings_icon.setStyleSheet(f"color: #{adjusted_color[0]:02x}{adjusted_color[1]:02x}{adjusted_color[2]:02x};")
+
             self.step += 1
             if self.step > steps:
                 self.timer.stop()
                 self.current_bg = end_bg
                 self.current_text = end_text
+                self.current_bottom_color = end_bottom
                 self.animating = False
-                self.mode_toggle.lock(False)
                 self.settings_menu.update_mode(dark_mode)
-        self.timer = QTimer(self)
+    
         self.timer.timeout.connect(update)
         self.timer.start(interval)
+    
+    def update(self):
+        pass  # Placeholder if needed for timer callback in animate_color_change
 
     def update_text_field_styles_dynamic(self, bg_color):
+        if not hasattr(self, 'part1_container') or self.part1_container is None:
+            return
+        if (not hasattr(self.part1_container, 'text_edit') or self.part1_container.text_edit is None or sip.isdeleted(self.part1_container.text_edit)):
+            return
+
         factor = (255 - bg_color[0]) / (255 - 45)
         new_bg = interpolate_color(self.textfield_bg_light, self.textfield_bg_dark, factor)
         new_border = interpolate_color(self.textfield_border_light, self.textfield_border_dark, factor)
