@@ -8,13 +8,6 @@ from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QP
 def log_write(msg):
     with open("session.log", "a") as f:
         f.write(msg + "\n")
-    try:
-        global main_win
-        if main_win:
-            main_win.update_log_field()
-            main_win.log_field.repaint()
-    except Exception:
-        pass
 
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
@@ -705,11 +698,16 @@ class MainWindow(QMainWindow):
 
         bottom_layout.addStretch()
 
-        self.log_field = LogLineEdit()
-        self.log_field.setFixedSize(500, 18) 
-        self.log_field.setStyleSheet("background-color: #3D3D3D; color: #989898; border: none;")
-        self.log_field.setText("Log File is empty.")
-        bottom_layout.addWidget(self.log_field)
+        self.log_button = QPushButton("Open Log")
+        self.log_button.setFixedSize(80, 18)
+        self.log_button.setStyleSheet("background-color: #3D3D3D; border-radius: 5px; color: #989898; border: none;")
+        self.log_button.clicked.connect(self.open_log)
+        bottom_layout.addWidget(self.log_button)
+
+        self.run_button = QPushButton("Run")
+        self.run_button.setFixedSize(100, 20)
+        self.run_button.setStyleSheet("background-color: #006400; border-radius: 5px; color: #989898; border: 3px solid #004600;")
+        bottom_layout.addWidget(self.run_button)
 
         main_layout.addWidget(content_widget)
         main_layout.addWidget(self.bottom_bar_widget)
@@ -721,7 +719,6 @@ class MainWindow(QMainWindow):
         log_filename = "session.log"
         with open(log_filename, "w") as f:
             f.write("")
-        self.update_log_field()
 
         save_folder = "saves"
         if not os.path.exists(save_folder):
@@ -761,16 +758,12 @@ class MainWindow(QMainWindow):
         self.part3_container.update_field_count(count)
         self.update_text_field_styles_dynamic()
 
-    def update_log_field(self):
-        try:
-            with open("session.log", "r") as f:
-                lines = f.readlines()
-            if lines:
-                self.log_field.setText(lines[-1].stript())
-            else:
-                self.log_field.setText("Log File is empty")
-        except Exception as e:
-            self.log_field.setText("Log File error: " + str(e))
+    def open_log(self):
+        import os
+        if os.path.exists("session.log"):
+            QDesktopServices.openUrl(QUrl.fromLocalFile("session.log"))
+        else:
+            print("Log file not found.")
 
     def show_settings_menu(self):
         if not hasattr(self, 'overlay') or self.overlay is None:
