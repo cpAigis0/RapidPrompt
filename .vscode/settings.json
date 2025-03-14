@@ -3,6 +3,8 @@
         "Antialiasing",
         "Frameless",
         "isdeleted",
-        "Pixmap"
+        "Markable",
+        "Pixmap",
+        "relayout"
     ]
 }

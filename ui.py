@@ -1,9 +1,20 @@
 import sys
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl, QSize
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
-from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices, QTextCursor, QTextCharFormat
+
+def log_write(msg):
+    with open("session.log", "a") as f:
+        f.write(msg + "\n")
+    try:
+        global main_win
+        if main_win:
+            main_win.update_log_field()
+            main_win.log_field.repaint()
+    except Exception:
+        pass
 
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
@@ -123,8 +134,8 @@ class LogLineEdit(QLineEdit):
     
     def mousePressEvent(self, event):
         import os
-        if os.path.exists("output.log"):
-            QDesktopServices.openUrl(QUrl.fromLocalFile("output.log"))
+        if os.path.exists("session.log"):
+            QDesktopServices.openUrl(QUrl.fromLocalFile("session.log"))
         else:
             self.setText("Log File not found.")
         super().mousePressEvent(event)
@@ -181,6 +192,75 @@ class ClickableLabel(QLabel):
     def mousePressEvent(self, event):
         self.clicked.emit()
 
+class MarkableTextEdit(QTextEdit):
+    def __init__(self, parent_container, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.parent_container = parent_container
+        self.setReadOnly(True)
+        self.setAcceptRichText(True)
+        self.setFrameStyle(QTextEdit.NoFrame)
+        self.setAlignment(Qt.AlignHCenter)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+
+        if self.parent_container.current_mode == "mark":
+            for spot in self.parent_container.marked_spots:
+                existing_start = spot["start"]
+                existing_end = spot["start"] + spot["length"]
+                if start < existing_end and end > existing_start:
+                    return
+            marking_color = QColor(135, 206, 250, 51)
+            new_fmt = QTextCharFormat()
+            new_fmt.setBackground(marking_color)
+            cursor.mergeCharFormat(new_fmt)
+            length = end - start
+            marked_text = cursor.selectedText()
+            self.parent_container.marked_spots.append({
+                "start": start,
+                "length": length,
+                "text": marked_text
+            })
+            self.parent_container.update_marked_counter()
+            cursor.clearSelection()
+            self.setTextCursor(cursor)
+        elif self.parent_container.current_mode == "erase":
+            sel_start = cursor.selectionStart()
+            sel_end = cursor.selectionEnd()
+
+            spots_to_remove = []
+            for spot in self.parent_container.marked_spots:
+                spot_start = spot["start"]
+                spot_end = spot_start + spot["length"]
+                if spot_start < sel_end and spot_end > sel_start:
+                    spots_to_remove.append(spot)
+                    
+            if spots_to_remove:
+                self.parent_container.marked_spots = [
+                    spot for spot in self.parent_container.marked_spots if spot not in spots_to_remove
+                ]
+                full_cursor = QTextCursor(self.document())
+                full_cursor.select(QTextCursor.Document)
+                clear_fmt = QTextCharFormat()
+                clear_fmt.setBackground(Qt.transparent)
+                full_cursor.setCharFormat(clear_fmt)
+                for spot in self.parent_container.marked_spots:
+                    fmt = QTextCharFormat()
+                    fmt.setBackground(QColor(135, 206, 250, 51))
+                    temp_cursor = self.textCursor()
+                    temp_cursor.setPosition(spot["start"])
+                    temp_cursor.setPosition(spot["start"] + spot["length"], QTextCursor.KeepAnchor)
+                    temp_cursor.mergeCharFormat(fmt)
+                self.parent_container.update_marked_counter()
+            
+            cursor.clearSelection()
+            self.setTextCursor(cursor)
+
 class Part1Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -200,28 +280,161 @@ class Part1Container(QWidget):
 class Part2Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        self.label = QLabel()
-        self.label.setAlignment(Qt.AlignCenter)
-        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(self.label)
+        self.current_mode = None
+        self.marked_spots = []
+        self.outer_layout = QVBoxLayout(self)
+        self.outer_layout.setContentsMargins(0, 0, 0, 0)
+        self.outer_layout.setSpacing(5)
+
+        self.text_edit = MarkableTextEdit(self)
+        self.text_edit.setMinimumHeight(100)
+        self.text_edit.setAlignment(Qt.AlignHCenter)
+        self.text_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.outer_layout.addWidget(self.text_edit, 1, alignment=Qt.AlignHCenter)
+
+        self.marked_counter_label = QLabel("Marked: 0")
+        self.marked_counter_label.setAlignment(Qt.AlignCenter)
+        self.outer_layout.addWidget(self.marked_counter_label)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        btn_layout.setAlignment(Qt.AlignCenter)
+
+        self.btn_mark = QPushButton("Mark")
+        self.btn_erase = QPushButton("Erase")
+        self.btn_clear = QPushButton("Clear")
+        self.btn_eval = QPushButton("Eval")
+
+        btn_size = QSize(80, 30)
+        for btn in [self.btn_mark, self.btn_erase, self.btn_clear, self.btn_eval]:
+            btn.setFixedSize(btn_size)
+            btn.setStyleSheet("border-radius: 5px;")
+
+        self.btn_mark.setCheckable(True)
+        self.btn_erase.setCheckable(True)
+
+        mark_erase_normal = """
+            QPushButton {
+                background-color: #808080;
+                border: 1px solid #808080;
+                border-radius: 5px;
+                color: white;
+            }
+        """
+        mark_erase_pressed = """
+            QPushButton:checked {
+                background-color: #505050;
+                border: 3px solid #505050;
+                border-radius: 5px;
+                color: white;
+            }
+        """
+        self.btn_mark.setStyleSheet(mark_erase_normal + mark_erase_pressed)
+        self.btn_erase.setStyleSheet(mark_erase_normal + mark_erase_pressed)
+
+        reset_style = """
+            QPushButton {
+                background-color: #505050;
+                border: 3px solid #8B0000;
+                border-radius: 5px;
+                color: white;
+            }
+        """
+        eval_style = """
+            QPushButton {
+                background-color: #505050;
+                border: 3px solid #006400;
+                border-radius: 5px;
+                color: white;
+            }
+        """
+        self.btn_clear.setStyleSheet(reset_style)
+        self.btn_eval.setStyleSheet(eval_style)
+
+        self.btn_mark.setChecked(False)
+        self.btn_erase.setChecked(False)
+
+        self.btn_mark.toggled.connect(self.on_mark_toggled)
+        self.btn_erase.toggled.connect(self.on_erase_toggled)
+        self.btn_clear.clicked.connect(self.on_clear_clicked)
+        self.btn_eval.clicked.connect(self.on_eval_clicked)
+
+        btn_layout.addWidget(self.btn_mark)
+        btn_layout.addWidget(self.btn_erase)
+        btn_layout.addWidget(self.btn_clear)
+        btn_layout.addWidget(self.btn_eval)
+
+        self.outer_layout.addLayout(btn_layout)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.text_edit.setFixedWidth(int(self.width() / 2))
+
+    def update_marked_counter(self):
+        self.marked_counter_label.setText("Marked: " + str(len(self.marked_spots)))
+
+    def on_mark_toggled(self, checked):
+        if checked:
+            self.btn_erase.setChecked(False)
+            self.current_mode = "mark"
+        else:
+            if not self.btn_erase.isChecked():
+                self.current_mode = None
+
+    def on_erase_toggled(self, checked):
+        if checked:
+            self.btn_mark.setChecked(False)
+            self.current_mode = "erase"
+        else:
+            if not self.btn_mark.isChecked():
+                self.current_mode = None
+
+    def on_clear_clicked(self):
+        cursor = self.text_edit.textCursor()
+        cursor.select(QTextCursor.Document)
+        default_format = QTextCharFormat()
+        default_format.setBackground(Qt.transparent)
+        cursor.setCharFormat(default_format)
+        cursor.clearSelection()
+        self.text_edit.setTextCursor(cursor)
+        self.marked_spots = []
+        self.update_marked_counter()
+        log_write("Clear: All highlights removed")
+
+    def on_eval_clicked(self):
+        import os, json
+        self.marked_spots.sort(key=lambda spot: spot["start"])
+    
+        data = {"Marks": self.marked_spots}
+    
+        save_folder = "saves"
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+        json_path = os.path.join(save_folder, "session.json")
+    
+        with open(json_path, "w") as f:
+           json.dump(data, f, indent=4)
+    
+        log_write("Eval: marked_spots sorted and saved to " + json_path)
+
+    def update_text(self, new_text):
+        self.text_edit.setPlainText(new_text)
+        self.marked_spots = []
+        self.update_marked_counter()
+
 
 class Part3Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # We no longer use a layout; we position each combi manually.
         self.fields = []
-        self.spacing = 10  # space between combis
+        self.spacing = 10
 
-        # Create 4 combis initially.
         for _ in range(4):
             self.add_field()
 
     def add_field(self):
         field = TextFieldWithHeader()
-        # Set a minimum width of 200 (to allow tweaking later)
         field.setMinimumWidth(200)
-        # Each combi has a fixed height of 250 pixels.
         field.setFixedHeight(250)
         self.fields.append(field)
         field.setParent(self)
@@ -251,25 +464,19 @@ class Part3Container(QWidget):
         spacing = self.spacing
         container_width = self.width()
 
-        # We allow a maximum of 6 combis per row.
         full_columns = 6
-        rows = (total + full_columns - 1) // full_columns  # ceiling division
+        rows = (total + full_columns - 1) // full_columns
 
-        # Compute total content height and update minimum height so that
-        # the QScrollArea recognizes the full extent of the content.
         total_height = rows * 250 + (rows - 1) * spacing
         self.setMinimumHeight(int(total_height))
 
         for row in range(rows):
             start_index = row * full_columns
-            # Determine how many combis are in this row.
             if row == rows - 1:
                 count_in_row = total - start_index
             else:
                 count_in_row = full_columns
 
-            # For a full row, each combi's width is container_width divided by 6 (minus spacing).
-            # For a partial row, stretch the combis to fill the available width.
             if count_in_row > 0:
                 cell_width = (container_width - (count_in_row - 1) * spacing) / count_in_row
             else:
@@ -419,6 +626,7 @@ class MainWindow(QMainWindow):
         self.initial_reset_done = False
         self.installEventFilter(self)
         self.init_ui()
+        self.initialize_session_files()
         self.update_stylesheet(self.current_bg, self.current_text)
 
         self.style_timer = QTimer(self)
@@ -463,7 +671,7 @@ class MainWindow(QMainWindow):
         self.top_splitter.addWidget(scroll2)
 
         self.part1_container.text_edit.textChanged.connect(
-            lambda: self.part2_container.label.setText(self.part1_container.text_edit.toPlainText())
+            lambda: self.part2_container.text_edit.setText(self.part1_container.text_edit.toPlainText())
         )
         self.vertical_splitter.addWidget(self.top_splitter)
 
@@ -507,6 +715,20 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.bottom_bar_widget)
 
         self.setCentralWidget(self.central_widget)
+    
+    def initialize_session_files(self):
+        import os, json
+        log_filename = "session.log"
+        with open(log_filename, "w") as f:
+            f.write("")
+        self.update_log_field()
+
+        save_folder = "saves"
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+        json_path = os.path.join(save_folder, "session.json")
+        with open(json_path, "w") as f:
+            json.dump({"Marks": []}, f, indent=4)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -540,9 +762,15 @@ class MainWindow(QMainWindow):
         self.update_text_field_styles_dynamic()
 
     def update_log_field(self):
-        with open("output.log", "r") as f:
-            content = f.read().strip()
-            self.log_field.setText(content if content else "Log File is empty")
+        try:
+            with open("session.log", "r") as f:
+                lines = f.readlines()
+            if lines:
+                self.log_field.setText(lines[-1].stript())
+            else:
+                self.log_field.setText("Log File is empty")
+        except Exception as e:
+            self.log_field.setText("Log File error: " + str(e))
 
     def show_settings_menu(self):
         if not hasattr(self, 'overlay') or self.overlay is None:
@@ -657,7 +885,9 @@ class MainWindow(QMainWindow):
         """)
 
 if __name__ == '__main__':
+    import sys
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    global main_win
+    main_win = MainWindow()
+    main_win.show()
     sys.exit(app.exec_())
