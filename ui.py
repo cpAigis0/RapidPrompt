@@ -277,7 +277,7 @@ class Part2Container(QWidget):
         self.current_mode = None
         self.marked_spots = []
         self.outer_layout = QVBoxLayout(self)
-        self.outer_layout.setContentsMargins(0, 0, 0, 0)
+        self.outer_layout.setContentsMargins(0, 30, 0, 0)
         self.outer_layout.setSpacing(5)
 
         self.text_edit = MarkableTextEdit(self)
@@ -397,25 +397,47 @@ class Part2Container(QWidget):
 
     def on_eval_clicked(self):
         import os, json
-        self.marked_spots.sort(key=lambda spot: spot["start"])
+
+        # Check that there is at least one marked spot and all spots are valid.
+        proper_eval = (
+            len(self.marked_spots) > 0 and 
+            all(
+                isinstance(spot, dict) and 
+                "start" in spot and 
+                "length" in spot and 
+                "text" in spot and 
+                spot["length"] > 0 and 
+                spot["text"].strip() != ""
+                for spot in self.marked_spots
+            )
+        )
+
+        mw = self.window()
+        if proper_eval:
+            mw.eval_finished = True
+            mw.status_icon.setStatus("check")
+            self.marked_spots.sort(key=lambda spot: spot["start"])
     
-        data = {"Marks": self.marked_spots}
+            data = {"Marks": self.marked_spots}
     
-        save_folder = "saves"
-        if not os.path.exists(save_folder):
-            os.makedirs(save_folder)
-        json_path = os.path.join(save_folder, "session.json")
+            save_folder = "saves"
+            if not os.path.exists(save_folder):
+                os.makedirs(save_folder)
+            json_path = os.path.join(save_folder, "session.json")
     
-        with open(json_path, "w") as f:
-           json.dump(data, f, indent=4)
+            with open(json_path, "w") as f:
+               json.dump(data, f, indent=4)
     
-        log_write("Eval: marked_spots sorted and saved to " + json_path)
+            log_write("Eval: marked_spots sorted and saved to " + json_path)
+        else:
+            mw.eval_finished = False
+            mw.status_icon.setStatus("X")
+            log_write("Eval: No proper input to evaluate.")
 
     def update_text(self, new_text):
         self.text_edit.setPlainText(new_text)
         self.marked_spots = []
         self.update_marked_counter()
-
 
 class Part3Container(QWidget):
     def __init__(self, parent=None):
@@ -487,75 +509,122 @@ class OutputOverlay(QWidget):
         super().__init__(parent)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 50);")
         self.setGeometry(parent.rect())
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
     
     def resizeEvent(self, event):
         self.setGeometry(self.parent().rect())
         super().resizeEvent(event)
     
     def mousePressEvent(self, event):
-        event.ignore()
+        # This intercepts clicks to block interaction with widgets behind.
+        event.accept()
 
-class OutputField(QFrame):
-    def __init__(self, header_text="Header", content_text="Content", parent=None):
-        super().__init__(parent)
-        self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        self.header = QLineEdit(header_text)
-        self.header.setReadOnly(True)
-        self.header.setStyleSheet("QLineEdit { border: none; font: bold 10px; color: #E0E0E0; }")
-        self.content = QTextEdit(content_text)
-        self.content.setReadOnly(True)
-        self.content.setStyleSheet("QTextEdit { background-color: #2d2d2d; border: none; color: #ddd; font-size: 13px; }")
-        layout.addWidget(self.header)
-        layout.addWidget(self.content)
-        self.setMinimumSize(200, 100)
 
 class OutputWindow(QFrame):
     def __init__(self, outputs, parent=None):
         super().__init__(parent)
+        # Remove the Qt.Window flag so it's not a top-level window.
         self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        # Do NOT set window flags like Qt.Window | Qt.FramelessWindowHint here.
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(5)
         
+        # Top bar with back arrow button.
         top_layout = QHBoxLayout()
-        self.back_button = QPushButton("←")
+        self.back_button = QPushButton("←", self)
         self.back_button.setFixedSize(30, 30)
-        self.back_button.setStyleSheet("QPushButton { background-color: #444; color: #ddd; border: none; }")
+        self.back_button.setStyleSheet("QPushButton { background-color: transparent; color: #ddd; border: none; }")
         top_layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         top_layout.addStretch()
         main_layout.addLayout(top_layout)
         
+        # Grid layout for combis (up to 6 per row).
         self.grid_layout = QGridLayout()
         self.grid_layout.setSpacing(10)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addLayout(self.grid_layout)
+        
         self.populate_outputs(outputs)
+        self.adjustSize()
     
     def populate_outputs(self, outputs):
-        max_rows = 4
-        col = 0
-        row = 0
-        for header_text, content_text in outputs:
-            field = OutputField(header_text, content_text)
+        max_columns = 6  # Allow up to 6 output fields per row.
+        for index, (header_text, content_text) in enumerate(outputs):
+            row = index // max_columns
+            col = index % max_columns
+            field = OutputField(header_text, content_text, parent=self)
             self.grid_layout.addWidget(field, row, col)
-            row += 1
-            if row >= max_rows:
-                row = 0
-                col += 1
+
+
+class OutputField(QFrame):
+    def __init__(self, header_text="Header", content_text="Content", parent=None):
+        super().__init__(parent)
+        # Style this field like the settings menu.
+        self.setStyleSheet("QFrame { background-color: #666; border: 2px solid #ccc; border-radius: 8px; color: #ddd; }")
+        self.setMinimumSize(130, 65)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+        
+        self.header = QLineEdit(header_text, self)
+        self.header.setReadOnly(True)
+        self.header.setStyleSheet("QLineEdit { background: transparent; border: none; font: bold 10px; color: #E0E0E0; }")
+        
+        self.text_edit = QTextEdit(content_text, self)
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setStyleSheet("QTextEdit { background: transparent; border: none; font-size: 10px; color: #E0E0E0; }")
+        
+        layout.addWidget(self.header)
+        layout.addWidget(self.header)
+        layout.addWidget(self.text_edit)
+        
+        # Create a label for the "Copied" indicator.
+        self.copied_label = QLabel("Copied", self)
+        self.copied_label.setStyleSheet(
+            "background-color: black; border: 1px solid white; border-radius: 5px; color: white; padding: 2px;"
+        )
+        self.copied_label.setAlignment(Qt.AlignCenter)
+        self.copied_label.hide()
+        
+        # Install event filters on both widgets...
+        self.header.installEventFilter(self)
+        self.text_edit.installEventFilter(self)
+        # Also install on the text_edit's viewport to catch its mouse events.
+        self.text_edit.viewport().installEventFilter(self)
+    
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseButtonPress:
+            self.copyContent()
+            return True
+        return super().eventFilter(obj, event)
+    
+    def mousePressEvent(self, event):
+        self.copyContent()
+        event.accept()
+    
+    def copyContent(self):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.text_edit.toPlainText())
+        self.showCopiedIndicator()
+    
+    def showCopiedIndicator(self):
+        self.copied_label.show()
+        self.copied_label.adjustSize()
+        x = (self.width() - self.copied_label.width()) // 2
+        y = (self.height() - self.copied_label.height()) // 2
+        self.copied_label.move(x, y)
+        QTimer.singleShot(3000, self.copied_label.hide)
 
 class StatusIcon(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(18, 18)
         self.setAlignment(Qt.AlignCenter)
-        self.state = "reload"
+        self.state = "dots"
         self.variable = "NO"
         self.icon_mapping = {
-            "dots": {"symbol": "⋯", "color": "#b3b3b3"},
+            "dots": {"symbol": "O", "color": "#b3b3b3"},
             "X": {"symbol": "✕", "color": "#FF3B30"},
             "check": {"symbol": "✔", "color": "#34C759"},
             "reload": {"symbol": "↻", "color": "#8c8c8c"}
@@ -582,7 +651,6 @@ class StatusIcon(QLabel):
         self.state = state
         self.variable = variable
         self.update()
-
 
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
@@ -716,8 +784,7 @@ class MainWindow(QMainWindow):
 
         self.current_bg = self.dark_bg
         self.current_text = self.dark_text
-
-        self.animating = False
+        self.eval_finished = False
         self.timer = None
         self.initial_reset_done = False
         self.installEventFilter(self)
@@ -733,6 +800,7 @@ class MainWindow(QMainWindow):
         self.settings_menu = SettingsMenu(self.central_widget)
         self.settings_menu.hide()
         self.settings_menu.output_spin_box.valueChanged.connect(self.update_part3_fields)
+        self.run_button.clicked.connect(self.on_run_button_clicked)
 
     def init_ui(self):
         self.central_widget = QWidget()
@@ -877,6 +945,16 @@ class MainWindow(QMainWindow):
         else:
             print("Log file not found.")
 
+    def on_run_button_clicked(self):
+        if not self.eval_finished:
+            log_write("Run: Input needs to be evaluated first.")
+            self.status_icon.setStatus("X")
+            return
+        else:
+            self.status_icon.setStatus("reload")
+            log_write("Run: Running Program...")
+            # TODO: Implement the second functionality here.
+
     def show_settings_menu(self):
         if not hasattr(self, 'overlay') or self.overlay is None:
             self.overlay = ModalOverlay(self.central_widget)
@@ -900,24 +978,32 @@ class MainWindow(QMainWindow):
         self.settings_menu.raise_()
 
     def show_output_window(self):
-        self.output_overlay = OutputOverlay(self.central_widget)
-        self.output_overlay.show()
-        self.output_overlay.raise_()
-    
+        # Build outputs from your part3_container fields.
         outputs = []
         for field in self.part3_container.fields:
             header_text = field.header.text()
             content_text = field.text_edit.toPlainText()
             outputs.append((header_text, content_text))
     
+        # Create the overlay widget over the central widget.
+        self.output_overlay = OutputOverlay(self.central_widget)
+        self.output_overlay.show()
+        self.output_overlay.raise_()
+    
+        # Create the output window as a child of the overlay.
         self.output_window = OutputWindow(outputs, self.output_overlay)
         self.output_window.back_button.clicked.connect(self.close_output_window)
-        self.output_window.adjustSize()
-        overlay_rect = self.output_overlay.rect()
+
+        # Center the output window within the overlay.
+        mw = self.size()
+        max_width = int(mw.width() * 0.9)
+        max_height = int(mw.height() * 0.9)
         win_size = self.output_window.sizeHint()
-        x = (overlay_rect.width() - win_size.width()) // 2
-        y = (overlay_rect.height() - win_size.height()) // 2
-        self.output_window.setGeometry(x, y, win_size.width(), win_size.height())
+        output_width = min(win_size.width(), max_width)
+        output_height = min(win_size.height(), max_height)
+        x = (mw.width() - output_width) // 2
+        y = (mw.height() - output_height) // 2
+        self.output_window.setGeometry(x, y, output_width, output_height)
         self.output_window.show()
         self.output_window.raise_()
 
@@ -928,7 +1014,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'output_overlay'):
             self.output_overlay.close()
             self.output_overlay = None
-
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
@@ -941,26 +1026,37 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.settings_menu.isVisible():
-            menu_width = int(self.height() * 0.4)
-            menu_height = int(self.width() * 0.3)
-            self.settings_menu.setFixedSize(menu_width, menu_height)
-            x = (self.width() - menu_width) // 2
-            y = (self.height() - menu_height) // 2
-            self.settings_menu.move(x, y)
+
+        rect_f = QRectF(self.rect())
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 8, 8)
+        path.addRoundedRect(rect_f, 8.0, 8.0)
+
         region = QRegion(path.toFillPolygon().toPolygon())
         self.setMask(region)
+
+        if hasattr(self, 'output_overlay') and self.output_overlay:
+            self.output_overlay.setGeometry(self.central_widget.rect())
+            if hasattr(self, 'output_window') and self.output_window:
+                overlay_rect = self.output_overlay.rect()
+                win_size = self.output_window.sizeHint()
+                x = (overlay_rect.width() - win_size.width()) // 2
+                y = (overlay_rect.height() - win_size.height()) // 2
+                self.output_window.setGeometry(x, y, win_size.width(), win_size.height())
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        rect = self.rect()
-        rect.adjust(0, 0, -1, -1)
-        p.setPen(QPen(QColor("#444"), 1))
+    
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        p.setPen(Qt.NoPen)
         p.setBrush(QColor(self.current_bg[0], self.current_bg[1], self.current_bg[2]))
         p.drawRoundedRect(rect, 8, 8)
+    
+        border_pen = QPen(QColor("#333333"), 2)
+        p.setPen(border_pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(rect, 8, 8)
+    
         p.end()
 
     def update_text_field_styles_dynamic(self):
