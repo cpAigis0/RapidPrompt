@@ -1,8 +1,8 @@
 import sys
 from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl, QSize
-from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow,
+from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
-                             QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect)
+                             QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect, QSizeGrip)
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices, QTextCursor, QTextCharFormat
 
 def log_write(msg):
@@ -261,14 +261,15 @@ class Part1Container(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(1)
         
-        """self.input_label = QLabel("Input")
-        self.input_label.setAlignment(Qt.AlignCenter)
-        self.input_label.setFixedHeight(25)
-        self.input_label.setStyleSheet("QLineEdit { color: #555; font-size: 10px; border: none; font-weight: bold; }")
-        layout.addWidget(self.input_label)"""
-        
         self.text_edit = QTextEdit()
-        layout.addWidget(self.text_edit)
+        layout.addWidget(self.text_edit, alignment=Qt.AlignCenter)
+    
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        new_width = int(self.width() * 2/3)
+        new_height = int(self.height() * 2/3)
+        self.text_edit.setFixedWidth(new_width)
+        self.text_edit.setFixedHeight(new_height)
 
 class Part2Container(QWidget):
     def __init__(self, parent=None):
@@ -480,6 +481,108 @@ class Part3Container(QWidget):
                 index = start_index + i
                 x = i * (cell_width + spacing)
                 self.fields[index].setGeometry(int(x), int(y), int(cell_width), 250)
+
+class OutputOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: rgba(0, 0, 0, 50);")
+        self.setGeometry(parent.rect())
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+    
+    def resizeEvent(self, event):
+        self.setGeometry(self.parent().rect())
+        super().resizeEvent(event)
+    
+    def mousePressEvent(self, event):
+        event.ignore()
+
+class OutputField(QFrame):
+    def __init__(self, header_text="Header", content_text="Content", parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        self.header = QLineEdit(header_text)
+        self.header.setReadOnly(True)
+        self.header.setStyleSheet("QLineEdit { border: none; font: bold 10px; color: #E0E0E0; }")
+        self.content = QTextEdit(content_text)
+        self.content.setReadOnly(True)
+        self.content.setStyleSheet("QTextEdit { background-color: #2d2d2d; border: none; color: #ddd; font-size: 13px; }")
+        layout.addWidget(self.header)
+        layout.addWidget(self.content)
+        self.setMinimumSize(200, 100)
+
+class OutputWindow(QFrame):
+    def __init__(self, outputs, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(5)
+        
+        top_layout = QHBoxLayout()
+        self.back_button = QPushButton("←")
+        self.back_button.setFixedSize(30, 30)
+        self.back_button.setStyleSheet("QPushButton { background-color: #444; color: #ddd; border: none; }")
+        top_layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
+        top_layout.addStretch()
+        main_layout.addLayout(top_layout)
+        
+        self.grid_layout = QGridLayout()
+        self.grid_layout.setSpacing(10)
+        main_layout.addLayout(self.grid_layout)
+        self.populate_outputs(outputs)
+    
+    def populate_outputs(self, outputs):
+        max_rows = 4
+        col = 0
+        row = 0
+        for header_text, content_text in outputs:
+            field = OutputField(header_text, content_text)
+            self.grid_layout.addWidget(field, row, col)
+            row += 1
+            if row >= max_rows:
+                row = 0
+                col += 1
+
+class StatusIcon(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(18, 18)
+        self.setAlignment(Qt.AlignCenter)
+        self.state = "reload"
+        self.variable = "NO"
+        self.icon_mapping = {
+            "dots": {"symbol": "⋯", "color": "#b3b3b3"},
+            "X": {"symbol": "✕", "color": "#FF3B30"},
+            "check": {"symbol": "✔", "color": "#34C759"},
+            "reload": {"symbol": "↻", "color": "#8c8c8c"}
+        }
+        self.background_color = "#2d2d2d"
+    
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        mapping = self.icon_mapping.get(self.state, self.icon_mapping["dots"])
+        circle_color = QColor(mapping["color"])
+        rect = self.rect()
+        p.setBrush(circle_color)
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(rect)
+        p.setPen(QColor(self.background_color))
+        font = QFont("Arial", 12, QFont.Bold)
+        p.setFont(font)
+        # Use drawText with alignment to center the symbol exactly.
+        p.drawText(rect, Qt.AlignCenter, mapping["symbol"])
+        p.end()
+    
+    def setStatus(self, state, variable="NO"):
+        self.state = state
+        self.variable = variable
+        self.update()
+
 
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
@@ -698,11 +801,20 @@ class MainWindow(QMainWindow):
 
         bottom_layout.addStretch()
 
+        self.status_icon = StatusIcon()
+        bottom_layout.addWidget(self.status_icon)
+
         self.log_button = QPushButton("Open Log")
         self.log_button.setFixedSize(80, 18)
         self.log_button.setStyleSheet("background-color: #3D3D3D; border-radius: 5px; color: #989898; border: none;")
         self.log_button.clicked.connect(self.open_log)
         bottom_layout.addWidget(self.log_button)
+
+        self.show_output_button = QPushButton("Show Output")
+        self.show_output_button.setFixedSize(100, 18)
+        self.show_output_button.setStyleSheet("background-color: #525252; border-radius: 5px; color: #989898; border: none;")
+        self.show_output_button.clicked.connect(self.show_output_window)
+        bottom_layout.addWidget(self.show_output_button)
 
         self.run_button = QPushButton("Run")
         self.run_button.setFixedSize(100, 20)
@@ -787,6 +899,37 @@ class MainWindow(QMainWindow):
         self.settings_menu.fade_in()
         self.settings_menu.raise_()
 
+    def show_output_window(self):
+        self.output_overlay = OutputOverlay(self.central_widget)
+        self.output_overlay.show()
+        self.output_overlay.raise_()
+    
+        outputs = []
+        for field in self.part3_container.fields:
+            header_text = field.header.text()
+            content_text = field.text_edit.toPlainText()
+            outputs.append((header_text, content_text))
+    
+        self.output_window = OutputWindow(outputs, self.output_overlay)
+        self.output_window.back_button.clicked.connect(self.close_output_window)
+        self.output_window.adjustSize()
+        overlay_rect = self.output_overlay.rect()
+        win_size = self.output_window.sizeHint()
+        x = (overlay_rect.width() - win_size.width()) // 2
+        y = (overlay_rect.height() - win_size.height()) // 2
+        self.output_window.setGeometry(x, y, win_size.width(), win_size.height())
+        self.output_window.show()
+        self.output_window.raise_()
+
+    def close_output_window(self):
+        if hasattr(self, 'output_window'):
+            self.output_window.close()
+            self.output_window = None
+        if hasattr(self, 'output_overlay'):
+            self.output_overlay.close()
+            self.output_overlay = None
+
+
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
             geo = QRect(self.settings_menu.mapToGlobal(self.settings_menu.rect().topLeft()),
@@ -821,12 +964,13 @@ class MainWindow(QMainWindow):
         p.end()
 
     def update_text_field_styles_dynamic(self):
+        new_text_color = (255, 255, 255)
+        text_hex = '#%02x%02x%02x' % new_text_color
+
         new_bg = self.textfield_bg_dark
         new_border = self.textfield_border_dark
-        new_text_color = (255, 255, 255)
         bg_hex = '#%02x%02x%02x' % new_bg
         border_hex = '#%02x%02x%02x' % new_border
-        text_hex = '#%02x%02x%02x' % new_text_color
         style = f"""
             QTextEdit {{
                 background-color: {bg_hex};
@@ -839,6 +983,16 @@ class MainWindow(QMainWindow):
         self.part1_container.text_edit.setStyleSheet(style)
         for field in self.part3_container.fields:
             field.text_edit.setStyleSheet(style)
+
+        style_p2 = f"""
+            QTextEdit {{
+                background: transparent;
+                border: none;
+                color: {text_hex};
+                font-size: 15px;
+            }}
+        """
+        self.part2_container.text_edit.setStyleSheet(style_p2)
 
     def update_stylesheet(self, bg_color, text_color):
         self.central_widget.setStyleSheet(f"""
