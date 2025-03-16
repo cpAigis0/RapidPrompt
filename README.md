@@ -5,6 +5,16 @@ RapidPrompt is a GUI Prompt Distributer to fast and reliably distribute prompts 
 
 ![Fill Outputs](./gallery/04FillOutputs.png)
 
+**Contents**
+- [RapidPrompt](#rapidprompt)
+- [Features](#features)
+- [Installation](#installation)
+  - [Windows](#windows)
+  - [Linux](#linux)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
+
 ## Features
 
 - **Keyword Input:**  
