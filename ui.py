@@ -1,15 +1,17 @@
 import time
 import sys
 import os, json
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl, QSize
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
                              QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect, QSizeGrip, QFileDialog)
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices, QTextCursor, QTextCharFormat
 
+
 def log_write(msg):
     with open("session.log", "a") as f:
         f.write(msg + "\n")
+
 
 class TitleBarButton(QPushButton):
     def __init__(self, base_color, hover_icon, parent=None):
@@ -51,13 +53,14 @@ class TitleBarButton(QPushButton):
             p.drawText(QPoint(int(x), int(y)), txt)
         p.end()
 
+
 class CustomTitleBar(QWidget):
     def __init__(self, parent=None, window_title="RapidPrompt", file_title="~Untitled"):
         super().__init__(parent)
         self.setFixedHeight(25)
         self.window_title = window_title
         self.file_title = file_title if file_title else "~Untitled"
-        self._dragPos = None  # Initialize _dragPos to ensure safe usage
+        self._dragPos = None
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -121,6 +124,7 @@ class CustomTitleBar(QWidget):
         self.toggle_max_restore()
         super().mouseDoubleClickEvent(event)
 
+
 class LogLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -128,16 +132,17 @@ class LogLineEdit(QLineEdit):
         self.setCursor(Qt.PointingHandCursor)
     
     def mousePressEvent(self, event):
-        import os
         if os.path.exists("session.log"):
             QDesktopServices.openUrl(QUrl.fromLocalFile("session.log"))
         else:
             self.setText("Log File not found.")
         super().mousePressEvent(event)
 
+
 class CustomSplitterHandle(QSplitterHandle):
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
+
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -158,15 +163,18 @@ class CustomSplitterHandle(QSplitterHandle):
             p.setPen(QPen(Qt.gray, 1))
             p.drawLine(0, center_y, self.width(), center_y)
         p.end()
+
     def sizeHint(self):
         default = super().sizeHint()
         if self.orientation() == Qt.Horizontal:
             return QSize(self.parent().handleWidth(), default.height())
         return QSize(default.width(), self.parent().handleWidth())
 
+
 class CustomSplitter(QSplitter):
     def createHandle(self):
         return CustomSplitterHandle(self.orientation(), self)
+
 
 class TextFieldWithHeader(QWidget):
     def __init__(self, header_text="Header", parent=None):
@@ -182,10 +190,12 @@ class TextFieldWithHeader(QWidget):
         layout.addWidget(self.header)
         layout.addWidget(self.text_edit)
 
+
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
     def mousePressEvent(self, event):
         self.clicked.emit()
+
 
 class MarkableTextEdit(QTextEdit):
     def __init__(self, parent_container, *args, **kwargs):
@@ -256,13 +266,13 @@ class MarkableTextEdit(QTextEdit):
             cursor.clearSelection()
             self.setTextCursor(cursor)
 
+
 class Part1Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(1)
-        
         self.text_edit = QTextEdit()
         layout.addWidget(self.text_edit, alignment=Qt.AlignCenter)
     
@@ -272,6 +282,7 @@ class Part1Container(QWidget):
         new_height = int(self.height() * 2/3)
         self.text_edit.setFixedWidth(new_width)
         self.text_edit.setFixedHeight(new_height)
+
 
 class Part2Container(QWidget):
     def __init__(self, parent=None):
@@ -407,8 +418,6 @@ class Part2Container(QWidget):
         log_write("Clear: All highlights removed")
 
     def on_eval_clicked(self):
-        import os, json
-
         proper_eval = (
             len(self.marked_spots) > 0 and 
             all(
@@ -468,6 +477,7 @@ class Part2Container(QWidget):
         self.marked_spots = []
         self.update_marked_counter()
 
+
 class Part3Container(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -517,21 +527,14 @@ class Part3Container(QWidget):
 
         for row in range(rows):
             start_index = row * full_columns
-            if row == rows - 1:
-                count_in_row = total - start_index
-            else:
-                count_in_row = full_columns
-
-            if count_in_row > 0:
-                cell_width = (container_width - (count_in_row - 1) * spacing) / count_in_row
-            else:
-                cell_width = container_width
-
+            count_in_row = total - start_index if row == rows - 1 else full_columns
+            cell_width = (container_width - (count_in_row - 1) * spacing) / count_in_row if count_in_row > 0 else container_width
             y = row * (250 + spacing)
             for i in range(count_in_row):
                 index = start_index + i
                 x = i * (cell_width + spacing)
                 self.fields[index].setGeometry(int(x), int(y), int(cell_width), 250)
+
 
 class OutputOverlay(QWidget):
     def __init__(self, parent=None):
@@ -544,8 +547,8 @@ class OutputOverlay(QWidget):
         super().resizeEvent(event)
     
     def mousePressEvent(self, event):
-        # This intercepts clicks to block interaction with widgets behind.
         event.accept()
+
 
 class OutputWindow(QFrame):
     def __init__(self, outputs, parent=None):
@@ -555,7 +558,6 @@ class OutputWindow(QFrame):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(5)
         
-        # Top bar with back arrow button.
         top_layout = QHBoxLayout()
         self.back_button = QPushButton("←", self)
         self.back_button.setFixedSize(30, 30)
@@ -564,7 +566,6 @@ class OutputWindow(QFrame):
         top_layout.addStretch()
         main_layout.addLayout(top_layout)
         
-        # Grid layout for combis (up to 6 per row).
         self.grid_layout = QGridLayout()
         self.grid_layout.setSpacing(10)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
@@ -574,17 +575,17 @@ class OutputWindow(QFrame):
         self.adjustSize()
     
     def populate_outputs(self, outputs):
-        max_columns = 6  # Allow up to 6 output fields per row.
+        max_columns = 6
         for index, (header_text, content_text) in enumerate(outputs):
             row = index // max_columns
             col = index % max_columns
             field = OutputField(header_text, content_text, parent=self)
             self.grid_layout.addWidget(field, row, col)
 
+
 class OutputField(QFrame):
     def __init__(self, header_text="Header", content_text="Content", parent=None):
         super().__init__(parent)
-        # Style this field like the settings menu.
         self.setStyleSheet("QFrame { background-color: #666; border: 2px solid #ccc; border-radius: 8px; color: #ddd; }")
         self.setMinimumSize(130, 65)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -595,16 +596,14 @@ class OutputField(QFrame):
         self.header = QLineEdit(header_text, self)
         self.header.setReadOnly(True)
         self.header.setStyleSheet("QLineEdit { background: transparent; border: none; font: bold 10px; color: #E0E0E0; }")
+        layout.addWidget(self.header)
         
-        self.text_edit = QTextEdit(content_text, self)
+        self.text_edit = QTextEdit(self)
         self.text_edit.setReadOnly(True)
         self.text_edit.setStyleSheet("QTextEdit { background: transparent; border: none; font-size: 10px; color: #E0E0E0; }")
-        
-        layout.addWidget(self.header)
-        layout.addWidget(self.header)
+        self.text_edit.setPlainText(content_text)
         layout.addWidget(self.text_edit)
         
-        # Create a label for the "Copied" indicator.
         self.copied_label = QLabel("Copied", self)
         self.copied_label.setStyleSheet(
             "background-color: black; border: 1px solid white; border-radius: 5px; color: white; padding: 2px;"
@@ -612,10 +611,8 @@ class OutputField(QFrame):
         self.copied_label.setAlignment(Qt.AlignCenter)
         self.copied_label.hide()
         
-        # Install event filters on both widgets...
         self.header.installEventFilter(self)
         self.text_edit.installEventFilter(self)
-        # Also install on the text_edit's viewport to catch its mouse events.
         self.text_edit.viewport().installEventFilter(self)
     
     def eventFilter(self, obj, event):
@@ -640,6 +637,7 @@ class OutputField(QFrame):
         y = (self.height() - self.copied_label.height()) // 2
         self.copied_label.move(x, y)
         QTimer.singleShot(3000, self.copied_label.hide)
+
 
 class StatusIcon(QLabel):
     def __init__(self, parent=None):
@@ -668,7 +666,6 @@ class StatusIcon(QLabel):
         p.setPen(QColor(self.background_color))
         font = QFont("Arial", 12, QFont.Bold)
         p.setFont(font)
-        # Use drawText with alignment to center the symbol exactly.
         p.drawText(rect, Qt.AlignCenter, mapping["symbol"])
         p.end()
     
@@ -676,6 +673,7 @@ class StatusIcon(QLabel):
         self.state = state
         self.variable = variable
         self.update()
+
 
 class ModalOverlay(QWidget):
     def __init__(self, parent=None):
@@ -694,6 +692,7 @@ class ModalOverlay(QWidget):
         if self.parent() and hasattr(self.parent(), 'settings_menu'):
             self.parent().settings_menu.hide_with_fade()
         self.hide()
+
 
 class SettingsMenu(QFrame):
     def __init__(self, parent=None):
@@ -786,6 +785,7 @@ class SettingsMenu(QFrame):
         self.anim.setEndValue(0)
         self.anim.finished.connect(self.hide)
         self.anim.start()
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -917,7 +917,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
     
     def initialize_session_files(self):
-        import os, json
         log_filename = "session.log"
         with open(log_filename, "w") as f:
             f.write("")
@@ -961,7 +960,6 @@ class MainWindow(QMainWindow):
         self.update_text_field_styles_dynamic()
 
     def open_log(self):
-        import os
         if os.path.exists("session.log"):
             QDesktopServices.openUrl(QUrl.fromLocalFile("session.log"))
         else:
@@ -1036,16 +1034,13 @@ class MainWindow(QMainWindow):
             log_write(f"Run: Successfully finished in {run_duration:.2f} seconds.")
 
     def display_output_window(self, outputs):
-        # Create an overlay widget over the central widget.
         self.output_overlay = OutputOverlay(self.central_widget)
         self.output_overlay.show()
         self.output_overlay.raise_()
 
-        # Create the output window as a child of the overlay, using the processed outputs.
         self.output_window = OutputWindow(outputs, self.output_overlay)
         self.output_window.back_button.clicked.connect(self.close_output_window)
 
-        # Center the output window.
         mw = self.size()
         max_width = int(mw.width() * 0.9)
         max_height = int(mw.height() * 0.9)
@@ -1081,19 +1076,15 @@ class MainWindow(QMainWindow):
         self.settings_menu.raise_()
 
     def show_output_window(self):
-        # Use the finished outputs if available; otherwise, set outputs to an empty list.
         outputs = self.finished_outputs if hasattr(self, 'finished_outputs') and self.finished_outputs else []
 
-        # Create the overlay widget over the central widget.
         self.output_overlay = OutputOverlay(self.central_widget)
         self.output_overlay.show()
         self.output_overlay.raise_()
 
-        # Create the output window as a child of the overlay.
         self.output_window = OutputWindow(outputs, self.output_overlay)
         self.output_window.back_button.clicked.connect(self.close_output_window)
 
-        # Center the output window within the overlay.
         mw = self.size()
         max_width = int(mw.width() * 0.9)
         max_height = int(mw.height() * 0.9)
@@ -1120,9 +1111,7 @@ class MainWindow(QMainWindow):
         if filename:
             with open(filename, "r") as f:
                 layout_data = json.load(f)
-            # Update the number of fields in part3_container based on the imported layout
             self.part3_container.update_field_count(len(layout_data))
-            # Set each field's header and text content accordingly
             for field, data in zip(self.part3_container.fields, layout_data):
                 field.header.setText(data.get("header", ""))
                 field.text_edit.setPlainText(data.get("content", ""))
@@ -1133,17 +1122,14 @@ class MainWindow(QMainWindow):
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
     
-        # Open file dialog in the saves folder with JSON filter
         filename, _ = QFileDialog.getSaveFileName(self, "Export Layout", save_folder, "JSON Files (*.json)")
         if filename:
-            # Gather the layout data from part3_container
             layout_data = []
             for field in self.part3_container.fields:
                 layout_data.append({
                     "header": field.header.text(),
                     "content": field.text_edit.toPlainText()
                 })
-            # Write the data to the selected file
             with open(filename, "w") as f:
                 json.dump(layout_data, f, indent=4)
             log_write("Exported layout to " + filename)
@@ -1159,11 +1145,9 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-
         rect_f = QRectF(self.rect())
         path = QPainterPath()
         path.addRoundedRect(rect_f, 8.0, 8.0)
-
         region = QRegion(path.toFillPolygon().toPolygon())
         self.setMask(region)
 
@@ -1179,17 +1163,14 @@ class MainWindow(QMainWindow):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-    
         rect = self.rect().adjusted(1, 1, -1, -1)
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(self.current_bg[0], self.current_bg[1], self.current_bg[2]))
         p.drawRoundedRect(rect, 8, 8)
-    
         border_pen = QPen(QColor("#333333"), 2)
         p.setPen(border_pen)
         p.setBrush(Qt.NoBrush)
         p.drawRoundedRect(rect, 8, 8)
-    
         p.end()
 
     def update_text_field_styles_dynamic(self):
@@ -1260,8 +1241,8 @@ class MainWindow(QMainWindow):
             }}
         """)
 
+
 if __name__ == '__main__':
-    import sys
     app = QApplication(sys.argv)
     global main_win
     main_win = MainWindow()
