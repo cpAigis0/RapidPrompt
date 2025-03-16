@@ -1,9 +1,10 @@
 import time
 import sys
+import os, json
 from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl, QSize
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QMainWindow,
                              QSplitter, QScrollArea, QPushButton, QFrame, QSplitterHandle, QSpinBox,
-                             QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect, QSizeGrip)
+                             QTextEdit, QLineEdit, QSizePolicy, QGraphicsOpacityEffect, QSizeGrip, QFileDialog)
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QPixmap, QPainterPath, QRegion, QIcon, QDesktopServices, QTextCursor, QTextCharFormat
 
 def log_write(msg):
@@ -703,11 +704,6 @@ class SettingsMenu(QFrame):
         layout.setSpacing(5)
         
         layout.addStretch() 
-        
-        self.standard_layout_button = QPushButton("Set Standard Layout")
-        self.standard_layout_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
-        self.standard_layout_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        layout.addWidget(self.standard_layout_button)
 
         self.export_button = QPushButton("Export Layout")
         self.export_button.setStyleSheet("padding: 8px; border-radius: 0px; background-color: #444; color: #ddd;")
@@ -824,6 +820,8 @@ class MainWindow(QMainWindow):
         self.settings_menu = SettingsMenu(self.central_widget)
         self.settings_menu.hide()
         self.settings_menu.output_spin_box.valueChanged.connect(self.update_part3_fields)
+        self.settings_menu.export_button.clicked.connect(self.export_layout)
+        self.settings_menu.import_button.clicked.connect(self.import_layout)
         self.run_button.clicked.connect(self.on_run_button_clicked)
 
     def init_ui(self):
@@ -1007,6 +1005,7 @@ class MainWindow(QMainWindow):
             replaced_text = re.sub(pattern, replace_match, original_text)
             outputs.append((header, replaced_text))
 
+        self.finished_outputs = outputs
         self.display_output_window(outputs)
 
     def check_run_method(self):
@@ -1082,18 +1081,14 @@ class MainWindow(QMainWindow):
         self.settings_menu.raise_()
 
     def show_output_window(self):
-        # Build outputs from your part3_container fields.
-        outputs = []
-        for field in self.part3_container.fields:
-            header_text = field.header.text()
-            content_text = field.text_edit.toPlainText()
-            outputs.append((header_text, content_text))
-    
+        # Use the finished outputs if available; otherwise, set outputs to an empty list.
+        outputs = self.finished_outputs if hasattr(self, 'finished_outputs') and self.finished_outputs else []
+
         # Create the overlay widget over the central widget.
         self.output_overlay = OutputOverlay(self.central_widget)
         self.output_overlay.show()
         self.output_overlay.raise_()
-    
+
         # Create the output window as a child of the overlay.
         self.output_window = OutputWindow(outputs, self.output_overlay)
         self.output_window.back_button.clicked.connect(self.close_output_window)
@@ -1118,6 +1113,40 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'output_overlay'):
             self.output_overlay.close()
             self.output_overlay = None
+
+    def import_layout(self):
+        save_folder = os.path.join(os.getcwd(), "saves")
+        filename, _ = QFileDialog.getOpenFileName(self, "Import Layout", save_folder, "JSON Files (*.json)")
+        if filename:
+            with open(filename, "r") as f:
+                layout_data = json.load(f)
+            # Update the number of fields in part3_container based on the imported layout
+            self.part3_container.update_field_count(len(layout_data))
+            # Set each field's header and text content accordingly
+            for field, data in zip(self.part3_container.fields, layout_data):
+                field.header.setText(data.get("header", ""))
+                field.text_edit.setPlainText(data.get("content", ""))
+            log_write("Imported layout from " + filename)
+    
+    def export_layout(self):
+        save_folder = os.path.join(os.getcwd(), "saves")
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+    
+        # Open file dialog in the saves folder with JSON filter
+        filename, _ = QFileDialog.getSaveFileName(self, "Export Layout", save_folder, "JSON Files (*.json)")
+        if filename:
+            # Gather the layout data from part3_container
+            layout_data = []
+            for field in self.part3_container.fields:
+                layout_data.append({
+                    "header": field.header.text(),
+                    "content": field.text_edit.toPlainText()
+                })
+            # Write the data to the selected file
+            with open(filename, "w") as f:
+                json.dump(layout_data, f, indent=4)
+            log_write("Exported layout to " + filename)
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress and self.settings_menu.isVisible():
