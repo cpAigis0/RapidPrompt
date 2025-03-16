@@ -1,7 +1,7 @@
 # RapidPrompt
 
 RapidPrompt is a GUI Prompt Distributer to fast and reliably distribute prompts for Loras or other scenarios where only details in many prompt windows have to be changed.  
-*Note: This is a Windows program that is untested but should work on Linux.*
+*Note: This is a Windows program that should work on Linux but is untested.*
 
 ![Fill Outputs](./gallery/04FillOutputs.png)
 
