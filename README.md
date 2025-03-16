@@ -1,72 +1,74 @@
 # RapidPrompt
 
-RapidPrompt is a PyQt5-based UI tool that demonstrates an advanced, multi-panel interface with customizable text fields, editable headers, and an elegant dark/light mode toggle. Designed as a proof-of-concept, this “gross product” showcases custom widget techniques such as rounded outline frames, a custom toggle switch, and dynamic splitter layouts.
+RapidPrompt is a GUI Prompt Distributer to fast and reliably distribute prompts for Loras or other scenarios where only details in many prompt windows have to be changed.  
+*Note: This is a Windows program that is untested but should work on Linux.*
+
+![Fill Outputs](./gallery/04FillOutputs.png)
 
 ## Features
 
-- **Three-Panel Layout:**
-  - **Part 1:** A multi-line text input field.
-  - **Part 2:** A read-only display that updates with the input from Part 1.
-  - **Part 3:** A dynamic list of multi-line text fields with editable headers.
-- **Custom Outline Frames:**  
-  Each panel is wrapped in a rounded outline with consistent styling. The outlines have been carefully designed to leave space for splitter handles and always maintain padding between the border and content.
-- **Dark/Light Mode Toggle:**  
-  Easily switch between dark and light themes. Both the main UI and the settings overlay animate their background colors in sync.
-- **Responsive Settings Overlay:**  
-  A settings panel lets you reset the layout, toggle themes, and adjust the number of text fields in Part 3.
-- **Elegant Styling:**  
-  All text fields share a consistent look with elegant rounded edges, matching outer borders, and background colors that stand out appropriately based on the current theme.
+- **Keyword Input:**  
+  Input a variety of keywords that will appear in the outputs.  
+- **Grouping & Insertion Points:**  
+  Mark which inputs should be grouped or left separate.  
+  Set insertion points in your outputs using a lowercase letter combined with a number (e.g., `[a1]` or `[x1]`). The number determines which keyword will be inserted, while the letter serves only for your own orientation.  
+- **Custom Headers:**  
+  Assign each output with a unique header to distinguish them.  
+- **Output Copying:**  
+  Run the program and simply click into the output field to copy the results.  
+- **Layout Export/Import:**  
+  Export the current layout—including output texts and headers—for reuse later, making it easy to swap in different Loras or configurations.
+
+[Check Gallery for quick working overview](./gallery/01InputThenMark.png)
 
 ## Installation
 
-1. **Clone the repository:**
+### Windows
 
-   ```
-   git clone https://github.com/yourusername/rapidprompt.git
-   ```
+- Head to the release page and download the executable (.exe) file.
+- Alternatively, refer to the Linux installation instructions below if you prefer to execute or build the program yourself.
 
-2. Navigate to the project directory:
+### Linux
 
-    ```
-    cd rapidprompt
-    ```
+1. **Clone the Repository:**
+```
+git clone https://github.com/cpAigis0/RapidPrompt.git
+cd RapidPrompt
+```
 
-3. (Optional) Create and activate a virtual environment:
+2. **Set Up a Virtual Environment (Recommended):**
+```
+python3 -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
 
-    ```
-    python -m venv venv
-    source venv/bin/activate  # Windows: venv\Scripts\activate'
-    ```
+3. **Install the Dependencies:**
+```
+pip install -r requirements.txt
+```
 
-4. Install the required dependencies:
-
-    ```
-    pip install -r requirements.txt
-    ```
-
-
-## Usage
-
-Run the application with:
-
-    ```
-    python main.py
-    ```
-
-
-
-## Project Structure
-
- - main.py:
-    The entry point of the application.
- - ui.py:
-    Contains the complete PyQt5 UI implementation including all custom widgets and styling.
- - requirements.txt:
-    Lists all dependencies.
+4. **Run the Script:**
+```
+python rapidprompt.py
+```
 
 ## Contributing
 
-Contributions, suggestions, and bug reports are welcome! Feel free to open issues or submit pull requests to improve the project.
+I don't plan on updating the project actively, but if you'd like to contribute, feel free to help improve it! The usual process applies:
+
+- **Fork the Repository:**  
+  Create your own fork to work on improvements.
+
+- **Create a Branch:**  
+  Develop your feature or fix in a separate branch.
+
+- **Submit a Pull Request:**  
+  Once you're happy with your changes, submit a pull request. Please ensure your code follows the project's style and includes appropriate tests if applicable.
+
+- **Report Issues:**  
+  If you find bugs or have suggestions, please open an issue to discuss the matter.
+
+Your contributions are welcome!
 
 ## License
 
@@ -74,4 +76,4 @@ This project is licensed under the MIT License.
 
 ## Disclaimer
 
-RapidPrompt is a prototype developed to showcase custom PyQt5 interface techniques. It is provided "as is" without any warranty. Use it as a starting point for your own projects or as inspiration for custom UI development.
+By using this program, you acknowledge and agree that I, as the creator, am not responsible for how the program is used or any consequences arising from its use. Any modifications or further uses of this program are solely your responsibility. Use at your own risk.
