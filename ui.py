@@ -1,3 +1,4 @@
+import time
 import sys
 from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QRectF, QPropertyAnimation, pyqtSignal, QSize, QPoint, QUrl, QSize
 from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QMainWindow,
@@ -276,6 +277,7 @@ class Part2Container(QWidget):
         super().__init__(parent)
         self.current_mode = None
         self.marked_spots = []
+        self.overlay_field = None
         self.outer_layout = QVBoxLayout(self)
         self.outer_layout.setContentsMargins(0, 30, 0, 0)
         self.outer_layout.setSpacing(5)
@@ -363,6 +365,8 @@ class Part2Container(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.text_edit.setFixedWidth(int(self.width() / 2))
+        if self.overlay_field:
+            self.overlay_field.setGeometry(self.text_edit.geometry())
 
     def update_marked_counter(self):
         self.marked_counter_label.setText("Marked: " + str(len(self.marked_spots)))
@@ -384,6 +388,12 @@ class Part2Container(QWidget):
                 self.current_mode = None
 
     def on_clear_clicked(self):
+        if self.overlay_field is not None:
+            self.overlay_field.deleteLater()
+            self.overlay_field = None
+            log_write("Clear: Eval overlay removed.")
+            return
+        
         cursor = self.text_edit.textCursor()
         cursor.select(QTextCursor.Document)
         default_format = QTextCharFormat()
@@ -398,7 +408,6 @@ class Part2Container(QWidget):
     def on_eval_clicked(self):
         import os, json
 
-        # Check that there is at least one marked spot and all spots are valid.
         proper_eval = (
             len(self.marked_spots) > 0 and 
             all(
@@ -429,6 +438,25 @@ class Part2Container(QWidget):
                json.dump(data, f, indent=4)
     
             log_write("Eval: marked_spots sorted and saved to " + json_path)
+
+            if self.overlay_field is None:
+                self.overlay_field = QTextEdit(self.text_edit.parent())
+                self.overlay_field.setGeometry(self.text_edit.geometry())
+                app_bg = mw.current_bg
+                self.overlay_field.setStyleSheet(
+                    f"background-color: rgb({app_bg[0]}, {app_bg[1]}, {app_bg[2]});"
+                    + self.text_edit.styleSheet()
+                )
+                self.overlay_field.setFont(self.text_edit.font())
+                self.overlay_field.setReadOnly(True)
+                self.overlay_field.setFocusPolicy(Qt.NoFocus)
+
+            overlay_text = ""
+            for i, spot in enumerate(self.marked_spots, start=1):
+                overlay_text += f"{i}- {spot['text']}\n"
+            self.overlay_field.setPlainText(overlay_text.strip())
+            self.overlay_field.show()
+            self.overlay_field.raise_()
         else:
             mw.eval_finished = False
             mw.status_icon.setStatus("X")
@@ -518,13 +546,10 @@ class OutputOverlay(QWidget):
         # This intercepts clicks to block interaction with widgets behind.
         event.accept()
 
-
 class OutputWindow(QFrame):
     def __init__(self, outputs, parent=None):
         super().__init__(parent)
-        # Remove the Qt.Window flag so it's not a top-level window.
         self.setStyleSheet("QFrame { background-color: #2d2d2d; border: 2px solid #aaa; border-radius: 8px; color: #ddd; }")
-        # Do NOT set window flags like Qt.Window | Qt.FramelessWindowHint here.
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(5)
@@ -554,7 +579,6 @@ class OutputWindow(QFrame):
             col = index % max_columns
             field = OutputField(header_text, content_text, parent=self)
             self.grid_layout.addWidget(field, row, col)
-
 
 class OutputField(QFrame):
     def __init__(self, header_text="Header", content_text="Content", parent=None):
@@ -953,7 +977,87 @@ class MainWindow(QMainWindow):
         else:
             self.status_icon.setStatus("reload")
             log_write("Run: Running Program...")
-            # TODO: Implement the second functionality here.
+            self.run_start_time = time.time()
+            self.run_errors = []
+            try:
+                self.run_program_logic()
+            except Exception as e:
+                self.run_errors.append(e)
+            finally:
+                self.check_run_method()
+    
+    def run_program_logic(self):
+        import re
+        replacement_array = [spot["text"] for spot in self.part2_container.marked_spots]
+
+        outputs = []
+        for field in self.part3_container.fields:
+            original_text = field.text_edit.toPlainText().strip()
+            if original_text == "":
+                continue
+
+            header = field.header.text()
+            pattern = r"[a-z](\d+)"
+            def replace_match(match):
+                num = int(match.group(1))
+                if 1 <= num <= len(replacement_array):
+                    return replacement_array[num - 1]
+                else:
+                    return match.group(0)
+            replaced_text = re.sub(pattern, replace_match, original_text)
+            outputs.append((header, replaced_text))
+
+        self.display_output_window(outputs)
+
+    def check_run_method(self):
+        run_duration = time.time() - self.run_start_time if hasattr(self, 'run_start_time') else 0
+
+        written_fields_count = 0
+        empty_fields = []
+        for index, field in enumerate(self.part3_container.fields, start=1):
+            text = field.text_edit.toPlainText().strip()
+            if text == "":
+                empty_fields.append(index)
+            else:
+                written_fields_count += 1
+
+        log_write(f"Run: {written_fields_count} text field(s) contain text.")
+        if empty_fields:
+            log_write(f"Run: {len(empty_fields)} empty text field(s) detected at field numbers: {', '.join(map(str, empty_fields))}.")
+
+        errors = getattr(self, 'run_errors', [])
+        if errors:
+            log_write("Run: Errors encountered during runtime:")
+            for err in errors:
+                log_write(str(err))
+            self.status_icon.setStatus("X")
+            log_write("Run: Program failed.")
+        else:
+            self.status_icon.setStatus("check")
+            log_write(f"Run: Successfully finished in {run_duration:.2f} seconds.")
+
+    def display_output_window(self, outputs):
+        # Create an overlay widget over the central widget.
+        self.output_overlay = OutputOverlay(self.central_widget)
+        self.output_overlay.show()
+        self.output_overlay.raise_()
+
+        # Create the output window as a child of the overlay, using the processed outputs.
+        self.output_window = OutputWindow(outputs, self.output_overlay)
+        self.output_window.back_button.clicked.connect(self.close_output_window)
+
+        # Center the output window.
+        mw = self.size()
+        max_width = int(mw.width() * 0.9)
+        max_height = int(mw.height() * 0.9)
+        win_size = self.output_window.sizeHint()
+        output_width = min(win_size.width(), max_width)
+        output_height = min(win_size.height(), max_height)
+        x = (mw.width() - output_width) // 2
+        y = (mw.height() - output_height) // 2
+        self.output_window.setGeometry(x, y, output_width, output_height)
+        self.output_window.show()
+        self.output_window.raise_()
 
     def show_settings_menu(self):
         if not hasattr(self, 'overlay') or self.overlay is None:
