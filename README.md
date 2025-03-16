@@ -87,3 +87,6 @@ This project is licensed under the MIT License.
 ## Disclaimer
 
 By using this program, you acknowledge and agree that I, as the creator, am not responsible for how the program is used or any consequences arising from its use. Any modifications or further uses of this program are solely your responsibility. Use at your own risk.
+
+**Additional Notice:**  
+Please note that the code is not in an optimal state for upkeep and may be challenging to maintain. I acknowledge that I developed this project in just 4 days, and the code quality might reflect that rapid development process. Use or modify it with caution.
