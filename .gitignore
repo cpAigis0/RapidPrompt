@@ -2,3 +2,7 @@
 
 saves/ 
 __pycache__/
+build/
+dist/
+rapidprompt.exe
+rapidprompt.spec
